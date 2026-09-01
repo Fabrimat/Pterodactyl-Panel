@@ -56,6 +56,22 @@ Deployments that cannot persist those files may instead supply their contents
 through the `PASSPORT_PRIVATE_KEY` and `PASSPORT_PUBLIC_KEY` environment
 variables.
 
+`passport:keys` writes the private key readable only by the user that ran the
+command. Where Artisan and PHP-FPM run as different users that leaves the web
+process unable to read it, and issuing or verifying a token then fails even
+though the files are plainly there. The official Docker image is exactly this
+case: Artisan runs as `root` while PHP-FPM runs as `nginx`. Hand the keys over
+after generating them:
+
+```bash
+# Substitute whichever user PHP-FPM runs as.
+chown nginx:nginx storage/oauth-private.key storage/oauth-public.key
+chmod 600 storage/oauth-private.key
+```
+
+An installation where `php artisan` and PHP-FPM run as the same user, which is
+the normal bare-metal case, needs none of this.
+
 Until the keys exist the `oauth` guard resolves to nobody, which means OAuth
 simply does not work yet. API keys, sessions, and the error responses for
 unauthenticated requests are unaffected, so upgrading without running the command
