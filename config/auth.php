@@ -60,6 +60,11 @@ return [
             'driver' => 'token',
             'provider' => 'users',
         ],
+
+        'oauth' => [
+            'driver' => 'passport',
+            'provider' => 'users',
+        ],
     ],
 
     /*

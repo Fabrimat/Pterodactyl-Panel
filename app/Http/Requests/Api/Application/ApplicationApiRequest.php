@@ -9,6 +9,7 @@ use Illuminate\Validation\Validator;
 use Illuminate\Database\Eloquent\Model;
 use Pterodactyl\Services\Acl\Api\AdminAcl;
 use Illuminate\Foundation\Http\FormRequest;
+use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 use Pterodactyl\Exceptions\PterodactylException;
 
 abstract class ApplicationApiRequest extends FormRequest
@@ -40,6 +41,10 @@ abstract class ApplicationApiRequest extends FormRequest
         $token = $this->user()->currentAccessToken();
         if ($token instanceof TransientToken) { // @phpstan-ignore instanceof.alwaysFalse
             return true;
+        }
+
+        if (!$token instanceof ApiKey) {
+            return OAuthScopeAcl::check($this->user(), $token, $this->resource, $this->permission);
         }
 
         if ($token->key_type === ApiKey::TYPE_ACCOUNT) {
