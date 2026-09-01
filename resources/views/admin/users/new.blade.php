@@ -80,6 +80,17 @@
                             <p class="text-muted"><small>Setting this to 'Yes' gives a user full administrative access.</small></p>
                         </div>
                     </div>
+                    <div class="form-group col-md-12">
+                        <label for="require_2fa" class="control-label">Require 2-Factor Authentication</label>
+                        <div>
+                            <select name="require_2fa" class="form-control">
+                                <option value="">Use System Default</option>
+                                <option value="1">Required</option>
+                                <option value="0">Exempt</option>
+                            </select>
+                            <p class="text-muted"><small>Override the system-wide 2FA requirement for this user specifically.</small></p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

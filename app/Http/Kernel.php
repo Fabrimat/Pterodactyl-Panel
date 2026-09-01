@@ -30,6 +30,7 @@ use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Pterodactyl\Http\Middleware\Api\Daemon\DaemonAuthenticate;
 use Pterodactyl\Http\Middleware\Api\Client\RequireClientApiKey;
 use Pterodactyl\Http\Middleware\RequireTwoFactorAuthentication;
+use Pterodactyl\Http\Middleware\Api\Client\AuthenticateOAuthScopes;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Pterodactyl\Http\Middleware\Api\Client\SubstituteClientBindings;
 use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
@@ -69,7 +70,7 @@ class Kernel extends HttpKernel
         ],
         'api' => [
             EnsureStatefulRequests::class,
-            'auth:sanctum',
+            'auth:sanctum,oauth',
             IsValidJson::class,
             TrackAPIKey::class,
             RequireTwoFactorAuthentication::class,
@@ -82,6 +83,7 @@ class Kernel extends HttpKernel
         'client-api' => [
             SubstituteClientBindings::class,
             RequireClientApiKey::class,
+            AuthenticateOAuthScopes::class,
         ],
         'daemon' => [
             SubstituteBindings::class,

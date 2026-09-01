@@ -22,6 +22,22 @@ Stop settling for less. Make game servers a first class citizen on your platform
 * [Community Guides](https://pterodactyl.io/community/about.html)
 * Or, get additional help [via Discord](https://discord.gg/pterodactyl)
 
+## This fork
+
+Three things are added on top of the upstream Panel, each documented on its own:
+
+* [`MCP.md`](MCP.md) - the Panel as a Model Context Protocol server, served at
+  `POST /mcp`. There is no separate process to run and nothing to reverse proxy.
+* [`OAUTH.md`](OAUTH.md) - the Panel as an OAuth 2.1 authorization server, so an
+  external application can act on behalf of a real user instead of holding a
+  shared static key.
+* [`ROADMAP.md`](ROADMAP.md) - the direction of the fork and what is not built yet.
+
+Two-factor authentication is also enforced per user here, not only panel-wide. A
+user can be required to use it, or exempted from it, independently of the global
+setting; the control lives on the admin user pages and on the application API.
+Left unset, an account follows the global setting exactly as before.
+
 ## Sponsors
 
 I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.

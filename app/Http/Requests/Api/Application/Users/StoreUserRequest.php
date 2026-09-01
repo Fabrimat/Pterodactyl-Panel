@@ -26,6 +26,7 @@ class StoreUserRequest extends ApplicationApiRequest
             'password',
             'language',
             'root_admin',
+            'require_2fa',
         ])->toArray();
 
         $response['first_name'] = $rules['name_first'];
