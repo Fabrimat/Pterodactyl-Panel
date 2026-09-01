@@ -1,0 +1,21 @@
+{
+    "name": "pterodactyl-panel-mcp",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Model Context Protocol server exposing the panel's Application and Client REST APIs as tools.",
+    "main": "dist/src/index.js",
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "start": "node dist/src/index.js",
+        "test": "npm run build && node --test dist/test/redaction-check.js"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
+        "zod": "^4.5.4"
+    },
+    "devDependencies": {
+        "@types/node": "^22.20.1",
+        "typescript": "^5.9.3"
+    }
+}
