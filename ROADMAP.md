@@ -26,6 +26,19 @@ side cannot ship alone.
   `client:read`, `client:write`, `admin:read`, `admin:write`. The panel is also
   an OAuth resource server for `/mcp`, publishing RFC 9728 protected-resource
   metadata so a client can discover the authorization server on its own.
+- **Borg-compatible backup system.** A third backup adapter beside
+  `Backup::ADAPTER_WINGS` and `Backup::ADAPTER_AWS_S3`, registered in
+  `config/backups.php`. One Borg repository per server rather than per node or
+  panel-wide: Borg has no per-archive authorization inside a repository, so
+  sharing one across servers would let any server's key read every other
+  server's data, and per-server also caps the blast radius of corruption. The
+  repository passphrase is never stored - it is derived from the server UUID
+  and `BORG_PASSPHRASE_SECRET` on demand, the same secret discipline as
+  `APP_KEY`. Retention stays a panel concern rather than Borg's own `prune`,
+  since `prune` has no way to see a locked backup and would eventually delete
+  one out from under the panel. See [`BACKUPS.md`](BACKUPS.md). **Needs Wings
+  work:** the node side does not exist yet, so this delivered piece is the
+  panel half plus the specification the node side will be built against.
 
 ## Planned
 
@@ -38,25 +51,6 @@ vulnerability), it prevents understanding which MCP client or external
 application performed an action. Attribute OAuth-driven activity to the OAuth
 client so the activity log can distinguish an MCP client from a browser session.
 
-### Borg-compatible backup system
-
-Full Borg support, not a partial or best-effort integration — deduplicating,
-incremental, encrypted repositories as a first-class backup target.
-
-Lands as a third backup adapter beside the existing `Backup::ADAPTER_WINGS` and
-`Backup::ADAPTER_AWS_S3`, registered in `config/backups.php`. **Needs Wings work:**
-Borg runs on the node, against the server's data directory.
-
-Open questions worth settling before building:
-
-- Repository layout: one Borg repository per server, per node, or per panel, and
-  what that implies for deduplication ratio versus blast radius on corruption.
-- Passphrase and key custody — where the repokey lives, who can read it, and what
-  happens on node compromise.
-- Retention and pruning policy, and whether it is per-server or panel-wide.
-- Restore semantics: Borg's archive model does not map onto the current
-  restore-the-whole-backup flow, which the next item depends on.
-
 ### Richer user-facing backups
 
 The client API currently exposes little more than a backup's name, size and
@@ -66,6 +60,10 @@ completion state. With a deduplicating backend there is much more worth showing:
 - Single-file and single-directory restore, rather than all-or-nothing.
 - Real disk usage — deduplicated and compressed size against logical size.
 - Progress and failure detail during creation and restore.
+
+Two follow-ups from the Borg work belong here too: a reconciliation command
+for repositories orphaned by deleted servers, and time-based retention as a
+panel scheduled command rather than anything driven by Borg's own `prune`.
 
 ### Minecraft world manager
 

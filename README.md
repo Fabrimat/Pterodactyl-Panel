@@ -24,13 +24,15 @@ Stop settling for less. Make game servers a first class citizen on your platform
 
 ## This fork
 
-Three things are added on top of the upstream Panel, each documented on its own:
+Four things are added on top of the upstream Panel, each documented on its own:
 
 * [`MCP.md`](MCP.md) - the Panel as a Model Context Protocol server, served at
   `POST /mcp`. There is no separate process to run and nothing to reverse proxy.
 * [`OAUTH.md`](OAUTH.md) - the Panel as an OAuth 2.1 authorization server, so an
   external application can act on behalf of a real user instead of holding a
   shared static key.
+* [`BACKUPS.md`](BACKUPS.md) - the Panel's Borg backup adapter, deduplicating,
+  incremental and encrypted repositories driven by Wings on the node.
 * [`ROADMAP.md`](ROADMAP.md) - the direction of the fork and what is not built yet.
 
 Two-factor authentication is also enforced per user here, not only panel-wide. A
