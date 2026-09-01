@@ -23,6 +23,7 @@ class UserFormRequest extends AdminFormRequest
             'password',
             'language',
             'root_admin',
+            'require_2fa',
         ])->toArray();
     }
 }

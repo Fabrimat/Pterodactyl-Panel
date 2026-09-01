@@ -98,6 +98,17 @@
                             <p class="text-muted"><small>Setting this to 'Yes' gives a user full administrative access.</small></p>
                         </div>
                     </div>
+                    <div class="form-group">
+                        <label for="require_2fa" class="control-label">Require 2-Factor Authentication</label>
+                        <div>
+                            <select name="require_2fa" class="form-control">
+                                <option value="" {{ is_null($user->require_2fa) ? 'selected="selected"' : '' }}>Use System Default</option>
+                                <option value="1" {{ $user->require_2fa === true ? 'selected="selected"' : '' }}>Required</option>
+                                <option value="0" {{ $user->require_2fa === false ? 'selected="selected"' : '' }}>Exempt</option>
+                            </select>
+                            <p class="text-muted"><small>Override the system-wide 2FA requirement for this user specifically.</small></p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
