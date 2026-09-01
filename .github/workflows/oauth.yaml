@@ -28,9 +28,9 @@ jobs:
           tools: composer:v2
           coverage: none
       - run: cp .env.ci .env
-      # Composer resolves the dependency and writes the lock file here, the resulting
-      # files are uploaded below so that they can be committed to the branch.
-      - run: composer require laravel/passport --no-interaction --no-progress --prefer-dist
+      # Install from the committed lock file so this workflow exercises the same
+      # Passport release that a deployment would install.
+      - run: composer install --no-interaction --no-progress --prefer-dist
       - uses: actions/upload-artifact@v4
         if: always()
         with:

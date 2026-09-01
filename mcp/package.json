@@ -9,7 +9,7 @@
         "build": "tsc -p tsconfig.json",
         "start": "node dist/src/index.js",
         "start:http": "node dist/src/http.js",
-        "test": "npm run build && node --test dist/test/redaction-check.js dist/test/oauth-check.js dist/test/scope-gating-check.js dist/test/session-isolation-check.js dist/test/http-redaction-check.js"
+        "test": "npm run build && node --test dist/test/redaction-check.js dist/test/oauth-check.js dist/test/scope-gating-check.js dist/test/session-isolation-check.js dist/test/http-redaction-check.js dist/test/credential-filtering-check.js"
     },
     "dependencies": {
         "@modelcontextprotocol/sdk": "^1.30.0",

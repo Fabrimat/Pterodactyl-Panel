@@ -28,6 +28,15 @@ side cannot ship alone.
 
 ## Planned
 
+### Attribution for OAuth-driven activity
+
+Activity logs currently record `api_key_id = null` for actions driven through
+OAuth bearer tokens, making them indistinguishable from browser actions by the
+same user. While this is at parity with a stolen session cookie (not a new
+vulnerability), it prevents understanding which MCP client or external
+application performed an action. Attribute OAuth-driven activity to the OAuth
+client so the activity log can distinguish an MCP client from a browser session.
+
 ### Borg-compatible backup system
 
 Full Borg support, not a partial or best-effort integration — deduplicating,

@@ -106,22 +106,23 @@ re-run the OAuth flow and start a new session.
 
 ### Prerequisites
 
-This transport is built against the panel's future Passport-based OAuth 2.1
-authorization server. That work is not part of this server and does not
-exist yet; until it ships, this transport has no authorization server to
-talk to. When it does, the operator needs to:
+The panel is the OAuth 2.1 authorization server via Laravel Passport. To set
+up the authorization infrastructure, deploy the panel with the migrations and
+keys described in the panel's [OAUTH.md](../OAUTH.md).
 
-1. Register an OAuth client for the MCP host in the panel's Passport admin
-   (`php artisan passport:client`, or the eventual panel UI for it). Passport
-   has no Dynamic Client Registration (RFC 7591), so this is a manual,
-   one-time step per MCP host, not something this server can automate.
-2. Give the resulting client id to whoever configures their MCP host - the
-   user pastes it into their host's OAuth client configuration alongside
-   this server's URL. There is no separate client secret step for a public
-   (PKCE) client.
-3. Run this server with `PANEL_URL` pointing at the panel, since that
-   is also treated as the OAuth issuer (`PANEL_URL/oauth/authorize`,
-   `PANEL_URL/oauth/token`).
+For each MCP host that will connect:
+
+1. Register an OAuth client for the MCP host using the panel's Passport admin:
+   `php artisan passport:client --public`. This is a manual, one-time step per
+   MCP host (Passport has no Dynamic Client Registration). Give the operator a
+   name for the client and a redirect URI pointing to where the MCP host's
+   authorization callback lives.
+2. Give the resulting client id to whoever configures their MCP host - the user
+   pastes it into their host's OAuth client configuration alongside this
+   server's URL. There is no separate client secret step for a public (PKCE)
+   client.
+3. Run this server with `PANEL_URL` pointing at the panel, since that is also
+   treated as the OAuth issuer.
 
 ### Scopes
 
@@ -145,6 +146,12 @@ then, this server calls `GET /api/client/account` once with the caller's own
 token to find out who they are (in particular, the `admin` boolean the
 panel's `AccountTransformer` returns). That result is cached for the life of
 the session and is never re-fetched.
+
+**Sessions require the `client:read` scope.** The identity call is made to
+`/api/client/account`, which the panel refuses for tokens carrying only `admin`
+scopes. This means an admin-scopes-only token (no `client:read` or
+`client:write`) cannot open a session at all - the identity lookup will fail
+with a 403, and the session will not start.
 
 - A non-admin user gets the 68 `panel_client_*` tools, intersected with
   their token's scopes.

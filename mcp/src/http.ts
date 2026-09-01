@@ -11,10 +11,21 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { mcpAuthMetadataRouter, getOAuthProtectedResourceMetadataUrl } from '@modelcontextprotocol/sdk/server/auth/router.js';
 import { requireBearerAuth } from '@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js';
-import type { ApiName } from './endpoints.js';
+import type { ApiName, EndpointRow } from './endpoints.js';
 import { registerEndpointTools } from './tool-registry.js';
 import { OAUTH_SCOPES, bearerTokenVerifier, panelOAuthMetadata, scopeAllows } from './oauth.js';
 import { resolveIdentity } from './identity.js';
+
+// OAuth sessions cannot use routes that manage account credentials, because the panel
+// refuses those requests outright on the credential endpoints regardless of scope.
+// Stdio and API-key-authenticated callers can still use them.
+function isAccountCredentialRoute(row: EndpointRow): boolean {
+    return (
+        row.path.startsWith('/account/api-keys') ||
+        row.path.startsWith('/account/ssh-keys') ||
+        row.path.startsWith('/account/two-factor')
+    );
+}
 
 const DEFAULT_IDLE_MS = 30 * 60 * 1000;
 const DEFAULT_SWEEP_MS = 60 * 1000;
@@ -105,7 +116,7 @@ export function createHttpApp(options: HttpAppOptions): HttpApp {
             apis,
             token,
             readOnly: options.readOnly,
-            filter: (row) => scopeAllows(row, scopes),
+            filter: (row) => scopeAllows(row, scopes) && !isAccountCredentialRoute(row),
         });
 
         // `entry` is captured by the callbacks below before it is assigned; that is

@@ -87,6 +87,22 @@ It advertises the issuer, the authorization and token endpoints, the four scopes
 above, the supported grant types, and `S256` as the only PKCE code challenge
 method.
 
+## Revoking access
+
+To revoke all tokens issued to a specific OAuth client, set the `revoked` flag
+on the corresponding row in the `oauth_clients` table to `1`:
+
+```sql
+UPDATE oauth_clients SET revoked = 1 WHERE id = <client-id>;
+```
+
+All existing tokens for that client become invalid immediately - the `oauth`
+guard checks the flag on every request, so the client cannot refresh or reuse
+already-issued tokens. This is the only documented way to revoke a client.
+
+There is no per-token or per-user revocation surface yet. Revoking access to a
+specific token requires revoking the entire client.
+
 ## Two-factor authentication
 
 The consent screen is behind the same two-factor requirement as the rest of the
