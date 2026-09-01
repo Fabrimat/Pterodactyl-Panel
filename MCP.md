@@ -71,6 +71,11 @@ and PHP would only ever drift the two apart. `mcp-remote` is the standard
 bridge for exactly this situation and needs no code of the Panel's own to
 maintain.
 
+That server also had a `PANEL_MCP_READ_ONLY` switch, which is gone with it. An
+OAuth token granted only `client:read` and `admin:read` gets a read-only tool
+set and is the replacement. There is no equivalent for an API key: a key is
+unscoped, so a caller holding one gets every tool the account can reach.
+
 ## What tools you get
 
 Every caller gets the 68 client tools, named `panel_client_*`, covering the
