@@ -12,7 +12,7 @@ class MissingSigningKeysTest extends OAuthIntegrationTestCase
      * That is the state of an installation which has taken this code but has not run
      * "php artisan passport:keys" yet.
      */
-    protected function setUp(): void
+    public function setUp(): void
     {
         Passport::loadKeysFrom(__DIR__ . '/keys-that-do-not-exist');
 
