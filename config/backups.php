@@ -62,5 +62,49 @@ return [
 
             'storage_class' => env('AWS_BACKUPS_STORAGE_CLASS'),
         ],
+
+        // Configuration for storing backups using Borg. Borg itself runs on Wings, not
+        // on the Panel; the Panel only works out where each server's repository lives
+        // and what passphrase unlocks it, and hands that over to Wings on every backup,
+        // restore and delete request.
+        'borg' => [
+            'adapter' => Backup::ADAPTER_BORG,
+
+            // The base location under which every server gets its own repository, named
+            // after the server's UUID. A remote ssh:// target is the only supported mode
+            // here: a repository kept on the node itself becomes unreachable the moment
+            // the server is transferred to another node. Changing this value after
+            // backups already exist strands them at the old location, exactly as
+            // changing the S3 bucket does.
+            'repository' => env('BORG_REPOSITORY'),
+
+            // Every repository's passphrase is derived from this secret and the server's
+            // UUID, so it needs to be backed up with the same care as APP_KEY. Without
+            // it none of the existing backups can be read.
+            'passphrase_secret' => env('BORG_PASSPHRASE_SECRET'),
+
+            // The encryption mode used for new repositories.
+            'encryption' => env('BORG_ENCRYPTION', 'repokey-blake2'),
+
+            // Passed to `borg --compression` verbatim.
+            'compression' => env('BORG_COMPRESSION', 'zstd,3'),
+
+            'ssh' => [
+                'private_key' => env('BORG_SSH_PRIVATE_KEY'),
+                'known_hosts' => env('BORG_SSH_KNOWN_HOSTS'),
+            ],
+
+            // Seconds to wait on the repository lock before failing the backup.
+            'lock_wait' => (int) env('BORG_LOCK_WAIT', 600),
+
+            // Seconds between checkpoints while an archive is being written.
+            'checkpoint_interval' => (int) env('BORG_CHECKPOINT_INTERVAL', 1800),
+
+            // KiB/s, 0 disables the limit.
+            'upload_ratelimit' => (int) env('BORG_UPLOAD_RATELIMIT', 0),
+
+            // Whether Borg should stay within a single filesystem while archiving.
+            'one_file_system' => (bool) env('BORG_ONE_FILE_SYSTEM', true),
+        ],
     ],
 ];
