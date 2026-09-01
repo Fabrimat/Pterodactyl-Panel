@@ -115,7 +115,7 @@ class OAuthScopeAclTest extends TestCase
      */
     private function token(array $scopes): object
     {
-        return new class($scopes) {
+        return new class ($scopes) {
             public function __construct(private array $scopes)
             {
             }
