@@ -11,6 +11,15 @@ API, `panel_admin_*` tools) or `routes/api-client.php` (Client API,
 route is not exposed, since a token plus a raw socket URL is not usable over
 this server's stdio transport.
 
+It ships two transports:
+
+- **stdio**, authenticated with a static `PANEL_APPLICATION_KEY` /
+  `PANEL_CLIENT_KEY` pair read from the environment. Meant for local use or a
+  single admin/service account. See [Setup](#setup) below.
+- **Streamable HTTP**, where each caller authenticates as themselves with an
+  OAuth 2.1 bearer token and gets exactly the tools their own account and
+  token allow. See [Streamable HTTP transport (OAuth)](#streamable-http-transport-oauth).
+
 ## Setup
 
 ```
@@ -44,9 +53,11 @@ set in the client's server configuration. The server speaks stdio.
 - `src/endpoints.ts` is a single declarative table: one row per route, each
   carrying its HTTP method, path template, and zod schemas for path
   parameters, query parameters and body fields.
-- `src/index.ts` iterates that table once and registers one MCP tool per row
-  against a shared handler. There is no per-tool code and no generic
-  `panel_request(method, path)` escape hatch.
+- `src/tool-registry.ts` iterates that table and registers one MCP tool per
+  matching row against a shared handler. There is no per-tool code and no
+  generic `panel_request(method, path)` escape hatch. Both entry points
+  (`src/index.ts` for stdio, `src/http.ts` for Streamable HTTP) call into
+  this one module so they can't drift apart on how a row becomes a tool.
 - `src/client.ts` is the only place that talks HTTP. It never exposes a raw
   request/response/error object - only a status code plus the panel's own
   JSON error body ever reach a tool result.
@@ -76,6 +87,103 @@ set in the client's server configuration. The server speaks stdio.
   `panel_admin_users_update`).
 - **Read-only mode.** `PANEL_MCP_READ_ONLY=1` skips registering every
   non-GET row.
+
+## Streamable HTTP transport (OAuth)
+
+`npm run start:http` runs the same tool table over MCP's Streamable HTTP
+transport instead of stdio. The difference is identity: there is no shared
+`PANEL_APPLICATION_KEY` / `PANEL_CLIENT_KEY` for this transport. Every caller
+presents their own OAuth 2.1 bearer token, that token is forwarded to the
+panel verbatim on every call, and the tools a session gets depend on who the
+token belongs to.
+
+This is deliberate token passthrough, not the token-exchange pattern the MCP
+spec generally recommends: it's correct here because the authorization
+server (the panel) and the upstream API (also the panel) are the same trust
+domain. There is no vault, no exchange, and no refresh-token handling in
+this server - when the panel rejects a token, the MCP client is expected to
+re-run the OAuth flow and start a new session.
+
+### Prerequisites
+
+This transport is built against the panel's future Passport-based OAuth 2.1
+authorization server. That work is not part of this server and does not
+exist yet; until it ships, this transport has no authorization server to
+talk to. When it does, the operator needs to:
+
+1. Register an OAuth client for the MCP host in the panel's Passport admin
+   (`php artisan passport:client`, or the eventual panel UI for it). Passport
+   has no Dynamic Client Registration (RFC 7591), so this is a manual,
+   one-time step per MCP host, not something this server can automate.
+2. Give the resulting client id to whoever configures their MCP host - the
+   user pastes it into their host's OAuth client configuration alongside
+   this server's URL. There is no separate client secret step for a public
+   (PKCE) client.
+3. Run this server with `PANEL_URL` pointing at the panel, since that
+   is also treated as the OAuth issuer (`PANEL_URL/oauth/authorize`,
+   `PANEL_URL/oauth/token`).
+
+### Scopes
+
+Exactly four, matching an API and an access level:
+
+| Scope | Grants |
+| --- | --- |
+| `client:read` | Every `panel_client_*` GET tool. |
+| `client:write` | Every other `panel_client_*` tool. |
+| `admin:read` | Every `panel_admin_*` GET tool, if the user is also an admin. |
+| `admin:write` | Every other `panel_admin_*` tool, if the user is also an admin. |
+
+A token missing a scope does not get a degraded version of that scope's
+tools - it does not get them registered at all, so they never show up in the
+session's tool list.
+
+### Per-session model
+
+A session starts on the first `initialize` request. At that point, and only
+then, this server calls `GET /api/client/account` once with the caller's own
+token to find out who they are (in particular, the `admin` boolean the
+panel's `AccountTransformer` returns). That result is cached for the life of
+the session and is never re-fetched.
+
+- A non-admin user gets the 68 `panel_client_*` tools, intersected with
+  their token's scopes.
+- An admin gets all 110 tools, intersected with their token's scopes.
+
+Each session gets its **own** `McpServer` instance - not a shared one with
+per-request filtering - specifically so one user's tool list and bearer
+token can never leak into another user's session. Sessions are held in an
+in-memory map keyed by the MCP session id; a session is torn down (and its
+token discarded) when its transport closes, on an explicit session
+termination, or after `PANEL_MCP_HTTP_SESSION_IDLE_MS` (default 30 minutes)
+of inactivity, whichever comes first.
+
+### Discovery and 401s
+
+This server advertises itself as an OAuth-protected resource at
+`/.well-known/oauth-protected-resource/mcp` (RFC 9728), naming the panel as
+the authorization server. A request to `/mcp` with no bearer token, or one
+that fails local validation, gets `401` with a `WWW-Authenticate: Bearer`
+challenge that includes `resource_metadata`, so a spec-compliant MCP client
+can discover the panel and start the OAuth flow on its own.
+
+If the panel itself rejects the token during the one identity-resolution
+call at session start - including because a forced-2FA panel is rejecting a
+user who never enrolled TOTP - that panel error is surfaced verbatim (same
+status code, same JSON body) rather than collapsed into a generic failure,
+and a `401` specifically gets the same `WWW-Authenticate` challenge so the
+client knows to re-authenticate rather than retry the same token.
+
+### Running it
+
+```
+PANEL_URL=https://panel.example.com \
+PANEL_MCP_HTTP_PORT=8089 \
+PANEL_MCP_PUBLIC_URL=https://mcp.example.com/mcp \
+npm run start:http
+```
+
+See `.env.example` for the full list of HTTP-transport variables.
 
 ## Scope: what this does NOT cover
 
@@ -127,8 +235,27 @@ four fields gets the request rejected.
 npm test
 ```
 
-Runs the build then `node --test` against the compiled test in
-`test/redaction-check.ts`, which asserts that the error path in `client.ts`
-never leaks the `Authorization` header or a raw request/error object into a
-tool result, even when the underlying HTTP client throws an axios-shaped
-error object that carries the header on `.config.headers`.
+Runs the build then `node --test` against the compiled tests. None of them
+need a running panel - they stub it with a `fetch` mock:
+
+- `test/redaction-check.ts` - the error path in `client.ts` never leaks the
+  `Authorization` header or a raw request/error object into a tool result,
+  even when the underlying HTTP client throws an axios-shaped error object
+  that carries the header on `.config.headers`.
+- `test/oauth-check.ts` - the protected-resource metadata is served and
+  names the panel, and a missing or malformed bearer token gets `401` with a
+  spec-shaped `WWW-Authenticate` challenge.
+- `test/scope-gating-check.ts` - each of the four OAuth scopes registers
+  exactly its expected subset of tools, and a token with a scope missing
+  registers nothing from that subset.
+- `test/session-isolation-check.ts` - two concurrent HTTP sessions for
+  different identities get different tool counts and strictly separate
+  cached tokens; tearing one down (explicitly or via the idle sweep) removes
+  only that session's entry and token.
+- `test/http-redaction-check.ts` - extends the redaction guarantee above to
+  every HTTP-transport response path, including the one upstream call this
+  server makes on session start.
+
+These test files are named to avoid the repo-root Jest config, which has no
+`roots`/`testMatch` override and would otherwise sweep up anything under
+`__tests__/` or ending in `.test.ts` / `.spec.ts`.

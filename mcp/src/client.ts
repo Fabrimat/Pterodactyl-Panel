@@ -14,6 +14,11 @@ export interface RequestOptions {
     jsonBody?: unknown;
     textBody?: string;
     responseType?: 'text';
+    /**
+     * Overrides the env-configured key for this one call. Used by the HTTP transport to
+     * forward the calling session's own bearer token instead of a shared static key.
+     */
+    token?: string;
 }
 
 export interface ApiSuccess {
@@ -83,7 +88,7 @@ function networkErrorMessage(error: unknown): string {
 }
 
 export async function request(options: RequestOptions): Promise<ApiResult> {
-    const key = resolveKey(options.api);
+    const key = options.token ?? resolveKey(options.api);
     if (!key) {
         return {
             ok: false,
