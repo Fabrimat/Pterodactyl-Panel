@@ -43,7 +43,7 @@ abstract class ApplicationApiRequest extends FormRequest
             return true;
         }
 
-        if (!$token instanceof ApiKey) {
+        if (OAuthScopeAcl::isOAuthRequest()) {
             return OAuthScopeAcl::check($this->user(), $token, $this->resource, $this->permission);
         }
 

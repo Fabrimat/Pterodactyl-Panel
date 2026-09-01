@@ -2,6 +2,7 @@
 
 namespace Pterodactyl\Tests\Integration\Api\OAuth;
 
+use Pterodactyl\Models\User;
 use Illuminate\Http\Response;
 use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 
@@ -135,6 +136,29 @@ class ClientApiScopeTest extends OAuthIntegrationTestCase
 
         $this->getJson('/api/client')->assertOk();
         $this->postJson("/api/client/servers/$server->uuid/schedules", $this->scheduleAttributes())->assertOk();
+    }
+
+    /**
+     * A session authenticated request does not always arrive with a transient token
+     * attached. Once an earlier request has switched the default guard, actingAs() sets
+     * the user on that guard directly and the next request carries no access token at
+     * all. Those requests were still authenticated by the rest of the chain and must
+     * reach the permission checks untouched rather than being refused for having no
+     * scopes.
+     */
+    public function testSessionRequestWithoutAnAccessTokenIsUnaffected(): void
+    {
+        [$first, $server] = $this->generateTestAccount();
+
+        /** @var User $second */
+        $second = User::factory()->create();
+
+        $this->actingAs($first)->getJson('/api/client')->assertOk();
+        $this->actingAs($second)->getJson('/api/client')->assertOk();
+
+        $this->actingAs($first)
+            ->postJson("/api/client/servers/$server->uuid/schedules", $this->scheduleAttributes())
+            ->assertOk();
     }
 
     /**

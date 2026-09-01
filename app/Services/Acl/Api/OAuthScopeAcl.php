@@ -3,6 +3,7 @@
 namespace Pterodactyl\Services\Acl\Api;
 
 use Pterodactyl\Models\User;
+use Illuminate\Support\Facades\Auth;
 
 class OAuthScopeAcl
 {
@@ -15,6 +16,26 @@ class OAuthScopeAcl
     public const CLIENT_WRITE = 'client:write';
     public const ADMIN_READ = 'admin:read';
     public const ADMIN_WRITE = 'admin:write';
+
+    /**
+     * The guard that the authorization server issues tokens for, as registered in
+     * "config/auth.php" and used by the "api" middleware group.
+     */
+    public const GUARD = 'oauth';
+
+    /**
+     * Determine if the current request was authenticated by the OAuth guard.
+     *
+     * The authentication middleware records the guard that accepted the request, so
+     * this is the only thing that positively identifies an OAuth request. Inspecting
+     * the attached token cannot: a request may legitimately carry an API key, a
+     * transient session token, or no token at all, and every one of those was
+     * authenticated somewhere else in the chain and is not scoped.
+     */
+    public static function isOAuthRequest(): bool
+    {
+        return Auth::getDefaultDriver() === self::GUARD;
+    }
 
     /**
      * Returns every scope keyed by its identifier, with the description that is
