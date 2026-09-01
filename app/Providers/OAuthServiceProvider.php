@@ -3,6 +3,8 @@
 namespace Pterodactyl\Providers;
 
 use Laravel\Passport\Passport;
+use Illuminate\Auth\RequestGuard;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
@@ -33,6 +35,10 @@ class OAuthServiceProvider extends ServiceProvider
         Passport::tokensExpireIn(now()->addDays(7));
         Passport::refreshTokensExpireIn(now()->addDays(30));
 
+        if (!$this->hasSigningKeys()) {
+            $this->disableOAuthGuard();
+        }
+
         Route::get('/.well-known/oauth-authorization-server', AuthorizationServerController::class)
             ->name('oauth.metadata');
 
@@ -44,6 +50,38 @@ class OAuthServiceProvider extends ServiceProvider
                     $route->middleware($this->authorizationMiddleware);
                 }
             }
+        });
+    }
+
+    /**
+     * Determine if the keys Passport signs and verifies access tokens with are present,
+     * either on disk or supplied through the environment.
+     */
+    protected function hasSigningKeys(): bool
+    {
+        return !empty(config('passport.public_key')) || file_exists(Passport::keyPath('oauth-public.key'));
+    }
+
+    /**
+     * Replaces the guard Passport registers with one that never authenticates anybody.
+     *
+     * That guard is consulted on every API request Sanctum turns down, and building it
+     * reads the public key from disk. On an installation where "passport:keys" has not
+     * been run that read throws a LogicException, which the exception handler can only
+     * render as a 500, turning every unauthenticated request into a server error. No
+     * access token can have been issued or verified without the keys, so resolving to
+     * nobody is both accurate and lets the request continue to the usual 401.
+     */
+    protected function disableOAuthGuard(): void
+    {
+        Auth::resolved(function ($auth) {
+            $auth->extend('passport', function ($app, $name, array $config) use ($auth) {
+                return new RequestGuard(
+                    fn () => null,
+                    $app['request'],
+                    $auth->createUserProvider($config['provider'] ?? null)
+                );
+            });
         });
     }
 }

@@ -35,8 +35,7 @@ remain available to API keys and to the Panel front-end as before.
 Run these once, in this order, after deploying:
 
 ```bash
-# 1. Generate the signing keys. This is mandatory: without them the OAuth guard
-#    cannot be constructed and every API request will fail.
+# 1. Generate the signing keys. Nothing can be issued or verified without them.
 php artisan passport:keys
 
 # 2. Publish and run the migrations that back the authorization server.
@@ -51,6 +50,16 @@ The keys are written to `storage/oauth-private.key` and `storage/oauth-public.ke
 Deployments that cannot persist those files may instead supply their contents
 through the `PASSPORT_PRIVATE_KEY` and `PASSPORT_PUBLIC_KEY` environment
 variables.
+
+Until the keys exist the `oauth` guard resolves to nobody, which means OAuth
+simply does not work yet. API keys, sessions, and the error responses for
+unauthenticated requests are unaffected, so upgrading without running the command
+degrades rather than breaks.
+
+Installations that cache their routes need to run `php artisan route:cache` again
+after upgrading. The authorization server metadata route and the middleware added
+to Passport's consent endpoints are captured when the cache is built, so a cache
+generated before this change will not contain them.
 
 ## Registering a client
 

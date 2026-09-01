@@ -56,6 +56,7 @@ class AccountCredentialRouteTest extends OAuthIntegrationTestCase
 
         $this->getJson('/api/client/account/api-keys')->assertOk();
         $this->getJson('/api/client/account/ssh-keys')->assertOk();
+        $this->getJson('/api/client/account/two-factor')->assertOk();
 
         $this->postJson('/api/client/account/api-keys', [
             'description' => 'Test Key',
@@ -94,6 +95,8 @@ class AccountCredentialRouteTest extends OAuthIntegrationTestCase
             'list ssh keys' => ['GET', '/api/client/account/ssh-keys'],
             'create ssh key' => ['POST', '/api/client/account/ssh-keys'],
             'delete ssh key' => ['POST', '/api/client/account/ssh-keys/remove'],
+            'two factor setup' => ['GET', '/api/client/account/two-factor'],
+            'disable two factor' => ['POST', '/api/client/account/two-factor/disable'],
             'change email' => ['PUT', '/api/client/account/email'],
             'change password' => ['PUT', '/api/client/account/password'],
         ];

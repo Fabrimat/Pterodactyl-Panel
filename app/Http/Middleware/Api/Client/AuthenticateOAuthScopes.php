@@ -14,10 +14,15 @@ class AuthenticateOAuthScopes
      * access token is short lived and limited to the scopes a user consented to, so it
      * must never be usable to mint a permanent API key, register an SSH key, or take
      * the account over by changing the email address or password.
+     *
+     * The two factor routes are included because requesting the setup data rewrites the
+     * TOTP secret on the account and hands back the plain text of the new one, which is
+     * a credential change hiding behind a GET request.
      */
     public const PROTECTED_ROUTES = [
         'api/client/account/api-keys',
         'api/client/account/ssh-keys',
+        'api/client/account/two-factor',
         'api/client/account/email',
         'api/client/account/password',
     ];
