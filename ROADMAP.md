@@ -14,17 +14,18 @@ side cannot ship alone.
   `null` inherits the global `pterodactyl.auth.2fa_required` level, `true` forces
   2FA regardless of it, `false` exempts. Exposed in the admin user pages and the
   application API; deliberately not settable from the client API.
-- **MCP server** (`mcp/`). A standalone server exposing the panel's existing REST
-  APIs as tools: 42 application (admin) tools and 68 client (user) tools, over a
-  declarative endpoint table. Stdio transport with env-configured API keys.
-
-## In progress
-
-- **OAuth 2.1 via Laravel Passport.** The panel becomes its own authorization
-  server so an MCP client authenticates as a real user rather than with a shared
-  key, and administrators get the application tools automatically. Four scopes:
-  `client:read`, `client:write`, `admin:read`, `admin:write`. Adds a Streamable
-  HTTP transport to the MCP server with one session per user.
+- **MCP server.** The panel serves the Model Context Protocol natively at
+  `POST /mcp`, over a declarative endpoint table: 42 application (admin) tools
+  and 68 client (user) tools. Stateless Streamable HTTP, authenticated with
+  either an API key or an OAuth bearer token, dispatching every tool call
+  through the panel's own HTTP kernel so it gets the same middleware and
+  permission checks a REST call would. No separate process, no reverse proxy.
+- **OAuth 2.1 via Laravel Passport.** The panel is its own authorization server
+  so an MCP client authenticates as a real user rather than with a shared key,
+  and administrators get the application tools automatically. Four scopes:
+  `client:read`, `client:write`, `admin:read`, `admin:write`. The panel is also
+  an OAuth resource server for `/mcp`, publishing RFC 9728 protected-resource
+  metadata so a client can discover the authorization server on its own.
 
 ## Planned
 

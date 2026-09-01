@@ -5,6 +5,11 @@ application, such as an MCP host, can act on behalf of a real Panel user instead
 of sharing a static API key. Authorization is provided by
 [Laravel Passport](https://laravel.com/docs/passport).
 
+The Panel is also the OAuth resource server for its own MCP endpoint at `/mcp`
+(see [`MCP.md`](MCP.md)), which is the reason an access token issued here is
+useful in the first place: it is a bearer credential the endpoint accepts
+alongside a plain API key.
+
 An access token issued this way is bound to the user that approved it:
 
 * The client API is available to every token that carries a `client:*` scope.
@@ -86,6 +91,12 @@ GET /.well-known/oauth-authorization-server
 It advertises the issuer, the authorization and token endpoints, the four scopes
 above, the supported grant types, and `S256` as the only PKCE code challenge
 method.
+
+A client that starts from `/mcp` instead finds its way here through the RFC
+9728 protected-resource metadata for that endpoint, served without
+authentication at `/.well-known/oauth-protected-resource` and named as the
+`resource_metadata` parameter of the `WWW-Authenticate` challenge on a 401 from
+`/mcp`. See [`MCP.md`](MCP.md) for that document and the endpoint it describes.
 
 ## Revoking access
 
