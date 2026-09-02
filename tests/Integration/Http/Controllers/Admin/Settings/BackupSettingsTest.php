@@ -6,9 +6,23 @@ use Pterodactyl\Models\User;
 use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\Setting;
 use Pterodactyl\Tests\Integration\Http\HttpTestCase;
+use Illuminate\Foundation\Testing\DatabaseTransactions;
 
 class BackupSettingsTest extends HttpTestCase
 {
+    // IntegrationTestCase sets $connectionsToTransact but does not use this trait, so
+    // nothing a test built on it writes is rolled back. Every settings row and backup
+    // created below would otherwise survive into the next test in this class.
+    use DatabaseTransactions;
+
+    /**
+     * An admin submitting this form is a browser, not an API client. The JSON Accept
+     * header IntegrationTestCase sends by default turns a validation failure into a
+     * 422 document, while the page itself relies on being redirected back with the
+     * errors flashed to the session, which is what these tests assert against.
+     */
+    protected $defaultHeaders = ['Accept' => 'text/html'];
+
     public function testEmptyPlainFieldForgetsTheKeyRatherThanStoringAnEmptyString(): void
     {
         Setting::create(['key' => 'settings::backups:disks:borg:repository', 'value' => 'ssh://old-host/pterodactyl']);
