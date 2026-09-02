@@ -9,7 +9,7 @@ class BorgConfigurationService
     /**
      * The encryption modes Borg supports for a repository.
      */
-    private const VALID_ENCRYPTION_MODES = [
+    public const VALID_ENCRYPTION_MODES = [
         'repokey-blake2',
         'keyfile-blake2',
         'repokey',
@@ -24,7 +24,7 @@ class BorgConfigurationService
      * optional "auto," prefix. That prefix is checked for separately since it wraps
      * the same grammar rather than extending it.
      */
-    private const COMPRESSION_PATTERN = '/^(?:none|lz4|zstd(?:,(?:[1-9]|1[0-9]|2[0-2]))?|zlib(?:,[0-9])?|lzma(?:,[0-9])?)$/';
+    public const COMPRESSION_PATTERN = '/^(?:none|lz4|zstd(?:,(?:[1-9]|1[0-9]|2[0-2]))?|zlib(?:,[0-9])?|lzma(?:,[0-9])?)$/';
 
     /**
      * Builds the borg configuration sent to Wings for a given server. The same shape is
@@ -45,9 +45,10 @@ class BorgConfigurationService
             'passphrase' => $this->passphrase($server),
             'encryption' => $this->encryption(),
             'compression' => $this->compression(),
-            // Only sent for a repository the node reaches over SSH. Handing a private
-            // key to a node for an operation that cannot use it puts key material on
-            // its disk for nothing.
+            // Only sent for a repository the node reaches over SSH. A secret should
+            // never be sent for an operation that cannot use it, regardless of what
+            // the receiver then does with it - for example, a node that wrote it to
+            // disk anyway would be holding key material it has no use for.
             'ssh_private_key' => $remote ? config('backups.disks.borg.ssh.private_key') : null,
             'ssh_known_hosts' => $remote ? config('backups.disks.borg.ssh.known_hosts') : null,
             'lock_wait' => config('backups.disks.borg.lock_wait'),

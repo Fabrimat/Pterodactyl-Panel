@@ -68,12 +68,14 @@ Route::group(['prefix' => 'settings'], function () {
     Route::get('/', [Admin\Settings\IndexController::class, 'index'])->name('admin.settings');
     Route::get('/mail', [Admin\Settings\MailController::class, 'index'])->name('admin.settings.mail');
     Route::get('/advanced', [Admin\Settings\AdvancedController::class, 'index'])->name('admin.settings.advanced');
+    Route::get('/backups', [Admin\Settings\BackupController::class, 'index'])->name('admin.settings.backups');
 
     Route::post('/mail/test', [Admin\Settings\MailController::class, 'test'])->name('admin.settings.mail.test');
 
     Route::patch('/', [Admin\Settings\IndexController::class, 'update']);
     Route::patch('/mail', [Admin\Settings\MailController::class, 'update']);
     Route::patch('/advanced', [Admin\Settings\AdvancedController::class, 'update']);
+    Route::patch('/backups', [Admin\Settings\BackupController::class, 'update']);
 });
 
 /*

@@ -197,6 +197,7 @@ return [
         Pterodactyl\Providers\BladeServiceProvider::class,
         Pterodactyl\Providers\EventServiceProvider::class,
         Pterodactyl\Providers\HashidsServiceProvider::class,
+        Pterodactyl\Providers\BackupSettingsServiceProvider::class,
         Pterodactyl\Providers\BorgBackupServiceProvider::class,
         Pterodactyl\Providers\McpServiceProvider::class,
         Pterodactyl\Providers\OAuthServiceProvider::class,
