@@ -134,6 +134,24 @@ class BackupListTest extends HttpTestCase
             ->assertSee('orphaned=1&amp;page=2', false);
     }
 
+
+    /**
+     * The size column is formatted by the controller rather than in the view, because
+     * the obvious helper for it reaches for an extension this project does not require.
+     * This pins the formatting itself. It cannot catch that extension being absent:
+     * every PHP build CI runs on happens to carry it, which is exactly why the original
+     * call passed here and failed in production.
+     */
+    public function testBackupSizeIsRenderedInBinaryUnits(): void
+    {
+        $server = $this->createServerModel();
+        Backup::factory()->create(['server_id' => $server->id, 'bytes' => 60912435]);
+
+        $this->actingAsAdmin()
+            ->get(route('admin.backups'))
+            ->assertOk()
+            ->assertSee('58.09 MiB');
+    }
     private function actingAsAdmin(): self
     {
         return $this->actingAs(User::factory()->admin()->create());

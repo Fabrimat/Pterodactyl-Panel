@@ -74,7 +74,7 @@
                                         <code title="{{ $backup->backup_uuid }}">{{ $backup->backup_uuid }}</code>
                                     </td>
                                     <td>{{ $backup->disk }}</td>
-                                    <td>{{ \Illuminate\Support\Number::fileSize($backup->bytes, 2) }}</td>
+                                    <td>{{ $backup->size }}</td>
                                     <td>
                                         @if($backup->source === 'orphaned')
                                             <span class="label label-success">Successful</span>

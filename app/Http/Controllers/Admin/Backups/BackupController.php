@@ -40,6 +40,15 @@ class BackupController extends Controller
 
         $backups = $query->paginate(25)->withQueryString();
 
+        // Rows arrive as plain objects straight from the union, so there is no model
+        // accessor to hang a formatted size on. Doing it here keeps the view free of
+        // any formatting call of its own.
+        $backups->through(function (object $row): object {
+            $row->size = $this->formatBytes((int) $row->bytes);
+
+            return $row;
+        });
+
         return view('admin.backups.index', [
             'backups' => $backups,
             'servers' => Server::query()->orderBy('name')->get(['id', 'name']),
@@ -116,5 +125,21 @@ class BackupController extends Controller
                 DB::raw('NULL as is_locked'),
                 DB::raw('NULL as completed_at'),
             ]);
+    }
+
+    /**
+     * Formats a byte count for display. Illuminate\Support\Number::fileSize() reads as
+     * the obvious way to do this, but it goes through intl, an extension composer.json
+     * does not require and the production image does not ship. Calling it turns every
+     * row that has a size into a 500 while the tests all still pass, because the PHP
+     * builds CI runs on happen to carry the extension. The units are binary, matching
+     * the MiB the rest of the admin area already reports.
+     */
+    private function formatBytes(int $bytes): string
+    {
+        $units = ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB'];
+        $power = $bytes > 0 ? (int) min(floor(log($bytes, 1024)), count($units) - 1) : 0;
+
+        return round($bytes / 1024 ** $power, 2) . ' ' . $units[$power];
     }
 }
