@@ -107,18 +107,17 @@ class BackupSettingsFormRequest extends AdminFormRequest
     }
 
     /**
-     * A passphrase secret change is dangerous once a value is already set and
-     * this Panel has ever taken a backup. Soft-deleted backups still count:
-     * deleting a backup only removes its archive, not the repository, which
-     * keeps its key wrapped with the old passphrase until something rewraps
-     * it. A repository can therefore still exist, and stay locked to the old
-     * secret, even once every visible backup is gone.
+     * A passphrase secret change is dangerous whenever a value is already set and
+     * the submission changes or clears it. There is no reliable count of backups
+     * this Panel can read to decide whether it is safe to skip confirming: a
+     * server's backup rows are removed along with it, which is not the same as a
+     * repository no longer existing for it, so the gate does not try to use one.
      */
     protected function passphraseSecretChangeIsDangerous(): bool
     {
         $currentlySet = filled(config('backups.disks.borg.passphrase_secret'));
         $changing = $this->boolean('clear_passphrase_secret') || filled($this->input('backups:disks:borg:passphrase_secret'));
 
-        return $currentlySet && $changing && Backup::withTrashed()->count() > 0;
+        return $currentlySet && $changing;
     }
 }

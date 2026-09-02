@@ -40,11 +40,6 @@ class BackupController extends Controller
                 Backup::ADAPTER_BORG => 'Borg',
             ],
             'encryptionModes' => BorgConfigurationService::VALID_ENCRYPTION_MODES,
-            // A repository outlives its archives, so the count that matters for
-            // both the repository warning and the passphrase danger gate is
-            // every backup this Panel has ever taken, not just the ones still
-            // visible today.
-            'backupCount' => Backup::withTrashed()->count(),
             'passphraseSecretIsSet' => filled($this->config->get('backups.disks.borg.passphrase_secret')),
             'sshPrivateKeyIsSet' => filled($this->config->get('backups.disks.borg.ssh.private_key')),
         ]);
@@ -57,6 +52,14 @@ class BackupController extends Controller
     public function update(BackupSettingsFormRequest $request): RedirectResponse
     {
         foreach ($request->normalize() as $key => $value) {
+            // A browser submits textarea content with CRLF line endings, while the
+            // same value supplied through the environment arrives as LF. Normalizing
+            // here keeps a value stored through this page byte-identical to the same
+            // value set through the environment.
+            if ($key === 'backups:disks:borg:ssh:known_hosts' && is_string($value)) {
+                $value = str_replace("\r\n", "\n", $value);
+            }
+
             // A plain field submitted empty falls back to the environment or the
             // config default rather than being stored as an override of nothing.
             if ($value === null || $value === '') {
@@ -94,8 +97,12 @@ class BackupController extends Controller
         }
 
         $value = $request->input($key);
-        if (empty($value)) {
+        if ($value === null || $value === '') {
             return;
+        }
+
+        if ($key === 'backups:disks:borg:ssh:private_key') {
+            $value = str_replace("\r\n", "\n", $value);
         }
 
         $this->settings->set('settings::' . $key, $this->encrypter->encrypt($value));

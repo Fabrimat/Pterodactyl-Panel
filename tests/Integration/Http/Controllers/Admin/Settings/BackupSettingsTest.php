@@ -71,11 +71,15 @@ class BackupSettingsTest extends HttpTestCase
             ->assertSessionHasErrors(['backups:disks:borg:encryption']);
     }
 
-    public function testPassphraseSecretChangeIsRejectedWhenBackupsExistAndNotConfirmed(): void
+    /**
+     * The gate has no backup-count branch: a deleted server hard-deletes its backup
+     * rows with it, so a count read from this table can never be trusted to mean "no
+     * repository can still exist for this secret". Confirmation is required purely
+     * from a secret already being set and the submission changing or clearing it.
+     */
+    public function testPassphraseSecretChangeRequiresConfirmationWheneverASecretIsAlreadySet(): void
     {
         config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
-        $server = $this->createServerModel();
-        Backup::factory()->create(['server_id' => $server->id]);
 
         $this->actingAsAdmin()
             ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => 'new-secret']))
@@ -86,8 +90,6 @@ class BackupSettingsTest extends HttpTestCase
     {
         config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
         Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => encrypt('existing-secret')]);
-        $server = $this->createServerModel();
-        Backup::factory()->create(['server_id' => $server->id]);
 
         $this->actingAsAdmin()
             ->patch('/admin/settings/backups', $this->payload([
@@ -100,11 +102,8 @@ class BackupSettingsTest extends HttpTestCase
         $this->assertSame('new-secret', decrypt($stored->value));
     }
 
-    public function testPassphraseSecretChangeIsAcceptedWithoutConfirmationWhenThisPanelHasNeverTakenABackup(): void
+    public function testPassphraseSecretChangeIsAcceptedWithoutConfirmationWhenNoSecretIsCurrentlySet(): void
     {
-        config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
-        Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => encrypt('existing-secret')]);
-
         $this->actingAsAdmin()
             ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => 'new-secret']))
             ->assertSessionHasNoErrors();
@@ -113,23 +112,38 @@ class BackupSettingsTest extends HttpTestCase
         $this->assertSame('new-secret', decrypt($stored->value));
     }
 
-    /**
-     * A repository outlives its archives: deleting every backup does not delete the
-     * repository a node already created for it, so the confirmation still has to be
-     * required once a backup has ever existed, soft-deleted or not.
-     */
-    public function testPassphraseSecretChangeIsRejectedWhenOnlySoftDeletedBackupsExist(): void
+    public function testASecretValueOfZeroIsStoredRatherThanTreatedAsBlank(): void
     {
-        config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
-        $server = $this->createServerModel();
-        $backup = Backup::factory()->create(['server_id' => $server->id]);
-        $backup->delete();
-
-        $this->assertSame(0, Backup::query()->count());
-
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => 'new-secret']))
-            ->assertSessionHasErrors(['confirm_passphrase_secret_change']);
+            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => '0']))
+            ->assertSessionHasNoErrors();
+
+        $stored = Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first();
+        $this->assertSame('0', decrypt($stored->value));
+    }
+
+    public function testPrivateKeyLineEndingsAreNormalizedToLf(): void
+    {
+        $this->actingAsAdmin()
+            ->patch('/admin/settings/backups', $this->payload([
+                'backups:disks:borg:ssh:private_key' => "-----BEGIN KEY-----\r\nABCD\r\n-----END KEY-----",
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $stored = Setting::query()->where('key', 'settings::backups:disks:borg:ssh:private_key')->first();
+        $this->assertSame("-----BEGIN KEY-----\nABCD\n-----END KEY-----", decrypt($stored->value));
+    }
+
+    public function testKnownHostsLineEndingsAreNormalizedToLf(): void
+    {
+        $this->actingAsAdmin()
+            ->patch('/admin/settings/backups', $this->payload([
+                'backups:disks:borg:ssh:known_hosts' => "host-one ssh-ed25519 AAAA\r\nhost-two ssh-ed25519 BBBB",
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $stored = Setting::query()->where('key', 'settings::backups:disks:borg:ssh:known_hosts')->first();
+        $this->assertSame("host-one ssh-ed25519 AAAA\nhost-two ssh-ed25519 BBBB", $stored->value);
     }
 
     private function actingAsAdmin(): self
