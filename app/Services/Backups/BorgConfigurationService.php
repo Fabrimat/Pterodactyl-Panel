@@ -2,8 +2,6 @@
 
 namespace Pterodactyl\Services\Backups;
 
-use Pterodactyl\Models\Server;
-
 class BorgConfigurationService
 {
     /**
@@ -27,22 +25,49 @@ class BorgConfigurationService
     public const COMPRESSION_PATTERN = '/^(?:none|lz4|zstd(?:,(?:[1-9]|1[0-9]|2[0-2]))?|zlib(?:,[0-9])?|lzma(?:,[0-9])?)$/';
 
     /**
+     * One repository per server, holding every backup that server has ever taken.
+     * The current, and default, behaviour.
+     */
+    public const MODE_INCREMENTAL = 'incremental';
+
+    /**
+     * One repository per backup, so each one is self-contained and shares nothing
+     * with any other, at the cost of transferring and storing the full size every
+     * time.
+     */
+    public const MODE_SNAPSHOT = 'snapshot';
+
+    /**
+     * The repository layout modes this adapter supports.
+     */
+    public const VALID_MODES = [
+        self::MODE_INCREMENTAL,
+        self::MODE_SNAPSHOT,
+    ];
+
+    /**
      * Builds the borg configuration sent to Wings for a given server. The same shape is
      * used for a backup, a restore and a delete request; the archive name is the only
      * thing that changes between them, which is why it is taken as an argument rather
-     * than read off of a Backup model.
+     * than read off of a Backup model. Only the server's UUID is needed, never the
+     * model itself, since nothing here reads anything else off of it.
+     *
+     * $repositorySuffix is the value recorded on the backup row, if any. A non-null
+     * value is used verbatim and never recomputed, so a backup keeps resolving to the
+     * repository it actually was written to no matter what the mode is changed to
+     * afterwards; see repository() for what a null value falls back to.
      *
      * @throws \InvalidArgumentException
      */
-    public function handle(Server $server, string $archive): array
+    public function handle(string $serverUuid, string $archive, ?string $repositorySuffix = null): array
     {
-        $repository = $this->repository($server);
+        $repository = $this->repository($serverUuid, $repositorySuffix);
         $remote = $this->isRemote($repository);
 
         return [
             'repository' => $repository,
             'archive' => $archive,
-            'passphrase' => $this->passphrase($server),
+            'passphrase' => $this->passphrase($serverUuid),
             'encryption' => $this->encryption(),
             'compression' => $this->compression(),
             // Only sent for a repository the node reaches over SSH. A secret should
@@ -58,19 +83,47 @@ class BorgConfigurationService
     }
 
     /**
-     * Returns the repository location for a given server: one repository per server,
-     * living underneath the configured base location.
+     * The repository suffix a new backup should be recorded and built against, given
+     * the mode currently configured. This is the only place the mode is ever read: it
+     * is consulted once, at the moment a backup is created, and never again. NULL
+     * under the incremental mode, since that layout is nothing more than the server
+     * UUID, which repository() already falls back to for a null suffix - there is
+     * nothing that needs to be recorded for it. Callers creating a new backup must
+     * record whatever this returns onto the backup row, and pass that same value back
+     * in as handle()'s $repositorySuffix - see BorgDaemonBackupRepository::backup().
      *
      * @throws \InvalidArgumentException
      */
-    protected function repository(Server $server): string
+    public function newRepositorySuffix(string $serverUuid, string $archive): ?string
+    {
+        return $this->mode() === self::MODE_SNAPSHOT ? $serverUuid . '_' . $archive : null;
+    }
+
+    /**
+     * Returns the repository location a request should be built against.
+     *
+     * A non-null $repositorySuffix - whatever was recorded on the backup row - is
+     * joined to the base verbatim, and is never recomputed from the mode: a backup
+     * keeps resolving to the repository it actually was written to no matter what the
+     * mode is changed to afterwards. A null suffix always means the legacy per-server
+     * layout, unconditionally, regardless of the currently configured mode - either the
+     * row predates this column, or it was written while the mode was incremental, and
+     * both cases resolve the same way. The current mode never enters into resolving an
+     * existing backup; it is only ever consulted once, by newRepositorySuffix(), at the
+     * moment a new backup is created.
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function repository(string $serverUuid, ?string $repositorySuffix): string
     {
         $base = config('backups.disks.borg.repository');
         if (empty($base)) {
             throw new \InvalidArgumentException('No borg repository has been configured for this Panel.');
         }
 
-        return rtrim((string) $base, '/') . '/' . $server->uuid;
+        $suffix = $repositorySuffix ?? $serverUuid;
+
+        return rtrim((string) $base, '/') . '/' . $suffix;
     }
 
     /**
@@ -93,14 +146,14 @@ class BorgConfigurationService
      *
      * @throws \InvalidArgumentException
      */
-    protected function passphrase(Server $server): string
+    protected function passphrase(string $serverUuid): string
     {
         $secret = config('backups.disks.borg.passphrase_secret');
         if (empty($secret)) {
             throw new \InvalidArgumentException('No borg passphrase secret has been configured for this Panel.');
         }
 
-        return hash_hmac('sha256', 'borg:v1:' . $server->uuid, (string) $secret);
+        return hash_hmac('sha256', 'borg:v1:' . $serverUuid, (string) $secret);
     }
 
     /**
@@ -135,5 +188,20 @@ class BorgConfigurationService
         }
 
         return $compression;
+    }
+
+    /**
+     * Validates the configured repository mode against the set this adapter supports.
+     *
+     * @throws \InvalidArgumentException
+     */
+    protected function mode(): string
+    {
+        $mode = (string) config('backups.disks.borg.mode');
+        if (!in_array($mode, self::VALID_MODES, true)) {
+            throw new \InvalidArgumentException("The configured borg backup mode [$mode] is not supported.");
+        }
+
+        return $mode;
     }
 }

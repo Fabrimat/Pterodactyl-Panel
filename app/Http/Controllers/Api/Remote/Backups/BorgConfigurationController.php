@@ -47,6 +47,10 @@ class BorgConfigurationController extends Controller
             throw new BadRequestHttpException('This backup is not stored using the borg adapter.');
         }
 
-        return new JsonResponse($this->configurationService->handle($server, $model->uuid));
+        // A null borg_repository resolves to the plain per-server repository inside
+        // handle() itself - see BorgConfigurationService::repository() - whether
+        // because this backup predates that column or because it was written while
+        // the mode was incremental.
+        return new JsonResponse($this->configurationService->handle($server->uuid, $model->uuid, $model->borg_repository));
     }
 }

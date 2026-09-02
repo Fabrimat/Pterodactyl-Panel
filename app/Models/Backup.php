@@ -17,6 +17,10 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property string $name
  * @property string[] $ignored_files
  * @property string $disk
+ * @property string|null $borg_repository Path of this backup's borg repository, relative to
+ *     backups.disks.borg.repository. NULL means the legacy per-server layout - either the row
+ *     predates this column, or it was written while the mode was incremental - both of which
+ *     resolve straight to the server UUID underneath the configured base.
  * @property string|null $checksum
  * @property int $bytes
  * @property string|null $upload_id

@@ -32,6 +32,16 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
 
         Assert::isInstanceOf($this->server, Server::class);
 
+        $configuration = $this->configuration();
+
+        // Recorded before the request is sent, and inside the same transaction that
+        // created this backup row, so a mode change made afterwards can never leave a
+        // pre-existing backup pointed at the wrong repository. NULL under the
+        // incremental mode: repository() falls back to the server UUID on its own, so
+        // only the snapshot mode's per-backup suffix is ever actually written here.
+        $repositorySuffix = $configuration->newRepositorySuffix($this->server->uuid, $backup->uuid);
+        $backup->update(['borg_repository' => $repositorySuffix]);
+
         try {
             return $this->getHttpClient()->post(
                 sprintf('/api/servers/%s/backup', $this->server->uuid),
@@ -40,7 +50,7 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
                         'adapter' => $adapter,
                         'uuid' => $backup->uuid,
                         'ignore' => implode("\n", $backup->ignored_files),
-                        'borg' => $this->configuration()->handle($this->server, $backup->uuid),
+                        'borg' => $configuration->handle($this->server->uuid, $backup->uuid, $repositorySuffix),
                     ],
                 ]
             );
@@ -70,7 +80,7 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
                         'adapter' => $backup->disk,
                         'truncate_directory' => $truncate,
                         'download_url' => $url ?? '',
-                        'borg' => $this->configuration()->handle($this->server, $backup->uuid),
+                        'borg' => $this->configuration()->handle($this->server->uuid, $backup->uuid, $backup->borg_repository),
                     ],
                 ]
             );
@@ -99,7 +109,7 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
                 sprintf('/api/servers/%s/backup/%s', $this->server->uuid, $backup->uuid),
                 [
                     'json' => [
-                        'borg' => $this->configuration()->handle($this->server, $backup->uuid),
+                        'borg' => $this->configuration()->handle($this->server->uuid, $backup->uuid, $backup->borg_repository),
                     ],
                 ]
             );

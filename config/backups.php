@@ -89,6 +89,17 @@ return [
             // Passed to `borg --compression` verbatim.
             'compression' => env('BORG_COMPRESSION', 'zstd,3'),
 
+            // Borg has no full-vs-incremental switch of its own - every archive written into
+            // a repository is already deduplicated against everything else in it - so this
+            // chooses between repository layouts instead. "incremental" (the default) keeps
+            // one repository per server, so every backup after the first only transfers and
+            // stores what changed. "snapshot" gives every backup its own repository instead,
+            // so each one is self-contained and shares nothing with the others, at the cost of
+            // transferring and storing the full size every time. Changing this only affects
+            // backups created after the change: an existing backup keeps resolving to the
+            // repository it actually was written to, whatever the mode is set to later.
+            'mode' => env('BORG_BACKUP_MODE', 'incremental'),
+
             'ssh' => [
                 'private_key' => env('BORG_SSH_PRIVATE_KEY'),
                 'known_hosts' => env('BORG_SSH_KNOWN_HOSTS'),

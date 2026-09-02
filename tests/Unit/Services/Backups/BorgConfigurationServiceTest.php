@@ -2,13 +2,16 @@
 
 namespace Pterodactyl\Tests\Unit\Services\Backups;
 
-use Pterodactyl\Models\Server;
 use Pterodactyl\Tests\TestCase;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Pterodactyl\Services\Backups\BorgConfigurationService;
 
 class BorgConfigurationServiceTest extends TestCase
 {
+    private const SERVER_UUID = '9c858901-8a57-4791-81fe-4c455b099bc9';
+
+    private const ARCHIVE = 'archive-uuid';
+
     private BorgConfigurationService $service;
 
     public function setUp(): void
@@ -22,54 +25,49 @@ class BorgConfigurationServiceTest extends TestCase
             'backups.disks.borg.passphrase_secret' => 'test-secret',
             'backups.disks.borg.encryption' => 'repokey-blake2',
             'backups.disks.borg.compression' => 'zstd,3',
+            'backups.disks.borg.mode' => BorgConfigurationService::MODE_INCREMENTAL,
         ]);
     }
 
     public function testPassphraseIsSixtyFourLowercaseHexCharacters(): void
     {
-        $passphrase = $this->handle($this->server())['passphrase'];
+        $passphrase = $this->handle(self::SERVER_UUID)['passphrase'];
 
         $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $passphrase);
     }
 
     public function testPassphraseIsStableForTheSameServerAndSecret(): void
     {
-        $server = $this->server();
-
         $this->assertSame(
-            $this->handle($server)['passphrase'],
-            $this->handle($server)['passphrase']
+            $this->handle(self::SERVER_UUID)['passphrase'],
+            $this->handle(self::SERVER_UUID)['passphrase']
         );
     }
 
     public function testPassphraseDiffersForADifferentServer(): void
     {
-        $first = $this->handle($this->server('11111111-1111-1111-1111-111111111111'));
-        $second = $this->handle($this->server('22222222-2222-2222-2222-222222222222'));
+        $first = $this->handle('11111111-1111-1111-1111-111111111111');
+        $second = $this->handle('22222222-2222-2222-2222-222222222222');
 
         $this->assertNotSame($first['passphrase'], $second['passphrase']);
     }
 
     public function testPassphraseDiffersForADifferentSecret(): void
     {
-        $server = $this->server();
-
-        $first = $this->handle($server);
+        $first = $this->handle(self::SERVER_UUID);
 
         config(['backups.disks.borg.passphrase_secret' => 'a-different-secret']);
 
-        $second = $this->handle($server);
+        $second = $this->handle(self::SERVER_UUID);
 
         $this->assertNotSame($first['passphrase'], $second['passphrase']);
     }
 
     public function testPassphraseIsDomainSeparatedFromTheBareHmac(): void
     {
-        $server = $this->server();
+        $bare = hash_hmac('sha256', self::SERVER_UUID, 'test-secret');
 
-        $bare = hash_hmac('sha256', $server->uuid, 'test-secret');
-
-        $this->assertNotSame($bare, $this->handle($server)['passphrase']);
+        $this->assertNotSame($bare, $this->handle(self::SERVER_UUID)['passphrase']);
     }
 
     public function testEmptyPassphraseSecretThrows(): void
@@ -78,7 +76,7 @@ class BorgConfigurationServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
 
-        $this->handle($this->server());
+        $this->handle(self::SERVER_UUID);
     }
 
     public function testMissingPassphraseSecretThrows(): void
@@ -87,7 +85,7 @@ class BorgConfigurationServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
 
-        $this->handle($this->server());
+        $this->handle(self::SERVER_UUID);
     }
 
     public function testMissingRepositoryThrows(): void
@@ -96,16 +94,14 @@ class BorgConfigurationServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
 
-        $this->handle($this->server());
+        $this->handle(self::SERVER_UUID);
     }
 
-    public function testRepositoryUrlIsTheBaseJoinedWithTheServerUuid(): void
+    public function testRepositoryUrlIsTheBaseJoinedWithTheServerUuidUnderTheIncrementalMode(): void
     {
-        $server = $this->server();
-
         $this->assertSame(
-            'ssh://borg@backup.example.com:22/./pterodactyl/' . $server->uuid,
-            $this->handle($server)['repository']
+            'ssh://borg@backup.example.com:22/./pterodactyl/' . self::SERVER_UUID,
+            $this->handle(self::SERVER_UUID)['repository']
         );
     }
 
@@ -113,12 +109,96 @@ class BorgConfigurationServiceTest extends TestCase
     {
         config(['backups.disks.borg.repository' => 'ssh://borg@backup.example.com:22/./pterodactyl/']);
 
-        $server = $this->server();
+        $this->assertSame(
+            'ssh://borg@backup.example.com:22/./pterodactyl/' . self::SERVER_UUID,
+            $this->handle(self::SERVER_UUID)['repository']
+        );
+    }
+
+    /**
+     * A null suffix always means the legacy per-server layout, unconditionally - the
+     * mode never enters into resolving an existing backup. This is the guarantee the
+     * borg_repository column exists for: without it, flipping the mode to snapshot
+     * would make every backup taken under the old mode unrestorable and undeletable,
+     * because the panel would recompute a path the archive is not at.
+     */
+    public function testANullSuffixStaysAtThePerServerRepositoryEvenUnderTheSnapshotMode(): void
+    {
+        config(['backups.disks.borg.mode' => BorgConfigurationService::MODE_SNAPSHOT]);
 
         $this->assertSame(
-            'ssh://borg@backup.example.com:22/./pterodactyl/' . $server->uuid,
-            $this->handle($server)['repository']
+            'ssh://borg@backup.example.com:22/./pterodactyl/' . self::SERVER_UUID,
+            $this->handle(self::SERVER_UUID)['repository']
         );
+    }
+
+    /**
+     * A recorded suffix is what a backup actually was written to, so it is always used
+     * verbatim rather than recomputed - otherwise flipping the mode afterwards would
+     * make every backup taken under the old mode unrestorable and undeletable.
+     */
+    public function testARecordedSuffixIsUsedVerbatimRegardlessOfTheCurrentMode(): void
+    {
+        $recorded = self::SERVER_UUID . '_some-older-archive';
+        $expected = 'ssh://borg@backup.example.com:22/./pterodactyl/' . $recorded;
+
+        config(['backups.disks.borg.mode' => BorgConfigurationService::MODE_INCREMENTAL]);
+        $this->assertSame($expected, $this->handle(self::SERVER_UUID, $recorded)['repository']);
+
+        config(['backups.disks.borg.mode' => BorgConfigurationService::MODE_SNAPSHOT]);
+        $this->assertSame($expected, $this->handle(self::SERVER_UUID, $recorded)['repository']);
+    }
+
+    /**
+     * This is the two-step sequence BorgDaemonBackupRepository::backup() actually runs
+     * for a new backup: ask newRepositorySuffix() what the current mode calls for, then
+     * pass that straight into handle(). Under the snapshot mode that suffix is a flat
+     * sibling of the server's own path rather than nested underneath it. Both matter: a
+     * nested path would need borg init to create two missing parent directories over
+     * ssh://, which it cannot do, and a repository nested under the server's own would
+     * have Borg refuse to create it at all, since Borg will not create one underneath an
+     * existing one.
+     */
+    public function testANewBackupUnderTheSnapshotModeIsAFlatSiblingOfTheServerRepository(): void
+    {
+        config(['backups.disks.borg.mode' => BorgConfigurationService::MODE_SNAPSHOT]);
+
+        $suffix = $this->service->newRepositorySuffix(self::SERVER_UUID, self::ARCHIVE);
+
+        $this->assertSame(
+            'ssh://borg@backup.example.com:22/./pterodactyl/' . self::SERVER_UUID . '_' . self::ARCHIVE,
+            $this->handle(self::SERVER_UUID, $suffix)['repository']
+        );
+    }
+
+    public function testNewRepositorySuffixIsNullUnderTheIncrementalMode(): void
+    {
+        $this->assertNull($this->service->newRepositorySuffix(self::SERVER_UUID, self::ARCHIVE));
+    }
+
+    public function testNewRepositorySuffixIsTheServerAndArchiveUnderTheSnapshotMode(): void
+    {
+        config(['backups.disks.borg.mode' => BorgConfigurationService::MODE_SNAPSHOT]);
+
+        $this->assertSame(
+            self::SERVER_UUID . '_' . self::ARCHIVE,
+            $this->service->newRepositorySuffix(self::SERVER_UUID, self::ARCHIVE)
+        );
+    }
+
+    /**
+     * The mode is only ever read by newRepositorySuffix(), at the point a new backup is
+     * created - resolving an existing backup never touches it, so an invalid value only
+     * ever surfaces there rather than on every restore or delete of a backup already on
+     * disk.
+     */
+    public function testInvalidModeThrows(): void
+    {
+        config(['backups.disks.borg.mode' => 'full']);
+
+        $this->expectException(\InvalidArgumentException::class);
+
+        $this->service->newRepositorySuffix(self::SERVER_UUID, self::ARCHIVE);
     }
 
     #[DataProvider('validCompressionDataProvider')]
@@ -126,7 +206,7 @@ class BorgConfigurationServiceTest extends TestCase
     {
         config(['backups.disks.borg.compression' => $value]);
 
-        $this->assertSame($value, $this->handle($this->server())['compression']);
+        $this->assertSame($value, $this->handle(self::SERVER_UUID)['compression']);
     }
 
     public static function validCompressionDataProvider(): array
@@ -150,7 +230,7 @@ class BorgConfigurationServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
 
-        $this->handle($this->server());
+        $this->handle(self::SERVER_UUID);
     }
 
     public static function invalidCompressionDataProvider(): array
@@ -169,7 +249,7 @@ class BorgConfigurationServiceTest extends TestCase
 
         $this->expectException(\InvalidArgumentException::class);
 
-        $this->handle($this->server());
+        $this->handle(self::SERVER_UUID);
     }
 
     #[DataProvider('remoteRepositories')]
@@ -181,7 +261,7 @@ class BorgConfigurationServiceTest extends TestCase
             'backups.disks.borg.ssh.known_hosts' => 'HOST KEY LINE',
         ]);
 
-        $config = $this->handle($this->server());
+        $config = $this->handle(self::SERVER_UUID);
 
         $this->assertSame('PRIVATE KEY BODY', $config['ssh_private_key']);
         $this->assertSame('HOST KEY LINE', $config['ssh_known_hosts']);
@@ -196,7 +276,7 @@ class BorgConfigurationServiceTest extends TestCase
             'backups.disks.borg.ssh.known_hosts' => 'HOST KEY LINE',
         ]);
 
-        $config = $this->handle($this->server());
+        $config = $this->handle(self::SERVER_UUID);
 
         $this->assertNull($config['ssh_private_key']);
         $this->assertNull($config['ssh_known_hosts']);
@@ -225,13 +305,8 @@ class BorgConfigurationServiceTest extends TestCase
         ];
     }
 
-    private function server(string $uuid = '9c858901-8a57-4791-81fe-4c455b099bc9'): Server
+    private function handle(string $serverUuid, ?string $repositorySuffix = null): array
     {
-        return Server::factory()->make(['uuid' => $uuid]);
-    }
-
-    private function handle(Server $server): array
-    {
-        return $this->service->handle($server, 'archive-uuid');
+        return $this->service->handle($serverUuid, self::ARCHIVE, $repositorySuffix);
     }
 }
