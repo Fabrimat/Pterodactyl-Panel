@@ -40,9 +40,10 @@ side cannot ship alone.
   repository per server (the default, deduplicating) and one repository per
   backup (self-contained, no deduplication). Deleting a server no longer
   loses track of its backups either: they are recorded in an
-  `orphaned_backups` table before the cascade removes them, with an admin
-  page to delete or forget each one. See [`BACKUPS.md`](BACKUPS.md). **Needs
-  Wings work:** the node side does not exist yet, so this delivered piece is
+  `orphaned_backups` table before the cascade removes them and appear in the
+  unified backups list at `/admin/backups`, where they can be deleted or
+  forgotten. See [`BACKUPS.md`](BACKUPS.md). **Needs Wings work:** the node
+  side does not exist yet, so this delivered piece is
   the panel half plus the specification the node side will be built against.
 
 ## Planned
@@ -63,7 +64,7 @@ completion state. With a deduplicating backend there is much more worth showing:
 
 - Per-archive contents, so a user can see what is actually in a backup.
 - Single-file and single-directory restore, rather than all-or-nothing.
-- Real disk usage — deduplicated and compressed size against logical size.
+- Real disk usage: deduplicated and compressed size against logical size.
 - Progress and failure detail during creation and restore.
 
 Three follow-ups from the Borg work belong here too: a reconciliation command
@@ -82,7 +83,7 @@ Fits the existing egg-features mechanism (`config/egg_features/`, alongside the
 current `eula` feature) so it only appears on servers whose egg declares it.
 **Needs Wings work** for the filesystem operations.
 
-Open question: how much of this is world-format-aware — reading `level.dat` for
+Open question: how much of this is world-format-aware - reading `level.dat` for
 seed, game mode and version enables a far better interface, but couples the panel
 to Minecraft world formats and their version drift.
 
@@ -106,7 +107,7 @@ Deploy server content from a git repository or another deployment source, with
 first-class plugin deployment.
 
 - Pull a repository into a server's files, on demand or on a schedule.
-- Deploy hooks around the pull — stop, sync, run a command, start.
+- Deploy hooks around the pull: stop, sync, run a command, start.
 - Plugin deployment: install and update plugins from their upstream sources,
   with pinned versions so a deployment is reproducible.
 - Credentials for private repositories, kept out of server files.

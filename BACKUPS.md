@@ -154,9 +154,10 @@ HMAC-SHA256('borg:v1:' + server UUID, the passphrase secret in force)
 
 The secret that derivation consumes can live in either of two places, and
 which one is in force decides what a recovery needs. Set only in the
-environment, it is `BORG_PASSPHRASE_SECRET`. Saved through the admin backup
-settings page, it is a row in the `settings` table encrypted with `APP_KEY`,
-and it then takes precedence over the environment variable, which stops having
+environment, it is `BORG_PASSPHRASE_SECRET`. Saved at
+`/admin/backups/settings/borg`, it becomes a row in the `settings` table
+encrypted with `APP_KEY`, and takes precedence over the environment variable,
+which stops having
 any effect until the stored value is cleared. See **Configuration** below.
 
 This has consequences worth stating plainly:
@@ -168,9 +169,10 @@ This has consequences worth stating plainly:
 * Whether a rebuilt panel can open the existing repositories depends on which
   of the two places the secret was in, so a backup plan has to cover the right
   one. If it was only ever an environment variable, the environment alone is
-  enough. If it was saved through the settings page, what is needed is the
-  `settings` row **together with** the `APP_KEY` that encrypted it: either one
-  without the other recovers nothing, and an environment copy left over from
+  enough. If it was saved at `/admin/backups/settings/borg`, what is needed
+  is the `settings` row **together with** the `APP_KEY` that encrypted it:
+  either one without the other recovers nothing, and an environment copy left
+  over from
   before the save is stale and derives the wrong passphrases.
 * The server UUIDs a recovery needs are recoverable from the repository
   directory names themselves, in both cases, and regardless of which
@@ -178,8 +180,9 @@ This has consequences worth stating plainly:
   **Opening a repository without the panel** below for how the directory
   name differs between the two.
 * The `borg:v1:` prefix is domain separation and a version marker, not
-  decoration. Rotation is not supported in this version, and the settings page
-  does not provide it: replacing the secret there abandons access to every
+  decoration. Rotation is not supported in this version, and
+  `/admin/backups/settings/borg` does not provide it: replacing the secret
+  there abandons access to every
   repository the old one unlocked rather than re-keying them. If real rotation
   is ever built, the upgrade path is a `v2` prefix plus a maintenance command
   that runs `borg key change-passphrase` over every repository.
@@ -201,10 +204,10 @@ exactly one place, the wings log on the node.
 The operator's experience is therefore every backup for every affected server
 failing indefinitely, with no cause reachable from the panel at all, unless
 they have shell on the node and know to go read that log. This is why the
-confirmation on the settings page warns unconditionally and offers no
-reassuring branch: it is not a courtesy before a scary action, it is the only
-diagnostic for this failure that ever reaches a human, and it has to arrive
-before the fact because nothing arrives after it.
+confirmation at `/admin/backups/settings/borg` warns unconditionally and
+offers no reassuring branch: it is not a courtesy before a scary action, it
+is the only diagnostic for this failure that ever reaches a human, and it
+has to arrive before the fact because nothing arrives after it.
 
 Carrying a reason through would mean a new field on both the completion report
 and the event payload, in files upstream owns on both sides. That is a design
@@ -218,7 +221,7 @@ UUID, and Borg. Deriving it by hand is the same HMAC the panel computes:
 
 ```bash
 # The secret in force, which is not necessarily what the environment says. If
-# it was saved through the admin settings page, take the settings row for
+# it was saved at `/admin/backups/settings/borg`, take the settings row for
 # backups:disks:borg:passphrase_secret and decrypt it with the panel's
 # APP_KEY. Otherwise it is BORG_PASSPHRASE_SECRET from the environment.
 SECRET_IN_FORCE=...
@@ -263,14 +266,22 @@ living inside Borg itself.
 
 ## Configuration
 
-Every value below can be set either in the environment or from the admin
-backup settings page. A value saved through the page becomes a row in the
-`settings` table and takes precedence over the environment variable of the
-same name, which stops having any effect until that row is cleared; clearing
-it returns the environment variable to force. The passphrase secret and the
-SSH private key are stored encrypted with `APP_KEY`. A panel that sets
-`APP_ENVIRONMENT_ONLY=true` ignores stored settings entirely and reads the
-environment only, so on such a panel the page is display without effect.
+The BACKUPS sidebar category has two entries. Backups at `/admin/backups`
+lists all backups (live and orphaned), with each row showing its server, and
+can be filtered by server or orphan status. Backup Settings at
+`/admin/backups/settings/{section}` holds driver-specific configuration, where
+section is `general`, `s3`, or `borg`.
+
+Every value below can be set either in the environment or through the panel.
+`APP_BACKUP_DRIVER` lives at `/admin/backups/settings/general` and every
+`BORG_` value below it at `/admin/backups/settings/borg`. A value saved
+through the page becomes a row in the `settings` table and takes precedence
+over the environment variable of the same name, which stops having any effect
+until that row is cleared; clearing it returns the environment variable to
+force. The passphrase secret and the SSH private key are stored encrypted
+with `APP_KEY`. A panel that sets `APP_ENVIRONMENT_ONLY=true` ignores stored
+settings entirely and reads the environment only, so on such a panel the page
+shows these values without being able to change them.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -533,8 +544,8 @@ carried onto its orphan row untouched, so an orphaned snapshot backup still
 resolves to the repository it actually was written to rather than falling
 back to the legacy per-server path.
 
-An admin page at `/admin/settings/backups/orphaned` lists what has
-accumulated there, newest orphan first, with two actions per row:
+Orphaned backups appear in the unified list at `/admin/backups`, reachable
+by filtering to show orphans only, newest first, with two actions per row:
 
 * **Delete** removes the stored data and then the row. For `s3` the panel
   deletes the object directly with credentials it already holds, so this
@@ -586,21 +597,22 @@ Three things worth knowing before relying on Delete:
 * Deleting a server does not delete its Borg repository outright, but the
   data no longer disappears from the panel's view either - see **Orphaned
   backups** above for what is now recorded and what an administrator can do
-  about it. Actually removing a borg or wings backup's stored data through
-  that page still needs the node-scoped delete route Wings does not have
-  yet, so cleanup for those two adapters stays effectively manual until it
-  ships; a Borg repository holds a server's entire backup history and will
-  still dominate storage growth on a busy panel faster than a pile of
-  orphaned S3 objects does.
+  about it. Actually removing a borg or wings backup's stored data from the
+  unified backups list still needs the node-scoped delete route Wings does
+  not have yet, so cleanup for those two adapters stays effectively manual
+  until it ships; a Borg repository holds a server's entire backup history
+  and will still dominate storage growth on a busy panel faster than a pile
+  of orphaned S3 objects does.
 * No per-file or per-directory restore, and no browsing an archive's
   contents, even though Borg supports both. That is the "Richer user-facing
   backups" roadmap item.
 * No cross-server deduplication, by design - see the repository layout
   tradeoff above.
-* Rotating the passphrase secret is not supported. The admin settings page can
-  replace it, but replacing it abandons access to every repository the old
-  secret unlocked rather than re-keying them, which is destruction and not
-  rotation. See **Passphrase custody**.
+* Rotating the passphrase secret is not supported.
+  `/admin/backups/settings/borg` can be used to replace it, but replacing it
+  abandons access to every repository the old secret unlocked rather than
+  re-keying them, which is destruction and not rotation. See **Passphrase
+  custody**.
 * The first backup of a large server is a full one and can be slow.
   `BACKUP_PRUNE_AGE` defaults to 360 minutes, after which the panel marks a
   still-running backup as failed; raise it if a large server's first backup
