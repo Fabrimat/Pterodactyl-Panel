@@ -1,14 +1,15 @@
 @extends('layouts.admin')
-@include('partials/admin.settings.nav', ['activeTab' => 'backups'])
+@include('partials/admin.backups.nav', ['activeTab' => 'borg'])
 
 @section('title')
-    Backup Settings
+    Backup Settings - Borg
 @endsection
 
 @section('content-header')
-    <h1>Backup Settings<small>Configure the backup driver and Borg settings for Pterodactyl.</small></h1>
+    <h1>Backup Settings<small>Configure the Borg backup driver for Pterodactyl.</small></h1>
     <ol class="breadcrumb">
         <li><a href="{{ route('admin.index') }}">Admin</a></li>
+        <li><a href="{{ route('admin.backups') }}">Backups</a></li>
         <li class="active">Settings</li>
     </ol>
 @endsection
@@ -22,178 +23,13 @@
         <div class="col-xs-12">
             <p class="text-muted">
                 Every setting below overrides its matching environment variable. Leaving a plain field blank removes
-                the override and falls back to the environment value for that setting. The three secrets below work
-                differently: their stored value is never shown on this page, so an empty secret field always leaves
-                the stored secret unchanged, and the checkbox next to it removes it instead. A field that already has
-                a secret stored shows a row of dots as a placeholder so it is clear something is set, without ever
-                revealing what it is.
+                the override and falls back to the environment value for that setting. The passphrase secret and SSH
+                private key below work differently: their stored value is never shown on this page, so leaving one
+                blank always leaves the stored secret unchanged, and the checkbox next to it removes it instead. A
+                field that already has a secret stored shows a row of dots as a placeholder so it is clear something
+                is set, without ever revealing what it is.
             </p>
-            @if(config('backups.default') === \Pterodactyl\Models\Backup::ADAPTER_BORG && (empty(config('backups.disks.borg.repository')) || empty(config('backups.disks.borg.passphrase_secret'))))
-                <div class="alert alert-warning">
-                    The backup driver is set to Borg, but the repository or the passphrase secret below is not
-                    configured. No backup can be taken until both are set.
-                </div>
-            @endif
-            @if(config('backups.default') === \Pterodactyl\Models\Backup::ADAPTER_AWS_S3 && (empty(config('backups.disks.s3.bucket')) || empty(config('backups.disks.s3.secret'))))
-                <div class="alert alert-warning">
-                    The backup driver is set to Amazon S3, but the bucket or the secret access key below is not
-                    configured. No backup can be taken until both are set.
-                </div>
-            @endif
             <form action="" method="POST">
-                <div class="box">
-                    <div class="box-header with-border">
-                        <h3 class="box-title">Backup Driver</h3>
-                    </div>
-                    <div class="box-body">
-                        <div class="row">
-                            <div class="form-group col-md-12">
-                                <label class="control-label">Driver</label>
-                                <div>
-                                    @php
-                                        $driver = old('backups:default', config('backups.default'));
-                                    @endphp
-                                    <select class="form-control" name="backups:default">
-                                        @foreach($drivers as $value => $label)
-                                            <option value="{{ $value }}" @if($driver === $value) selected @endif>{{ $label }}</option>
-                                        @endforeach
-                                    </select>
-                                    <p class="text-muted small">Overrides APP_BACKUP_DRIVER. Wings stores archives on the node itself and needs nothing further configured here; S3 and Borg both need the matching settings below to actually take a backup.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="box">
-                    <div class="box-header with-border">
-                        <h3 class="box-title">General Backup Settings</h3>
-                    </div>
-                    <div class="box-body">
-                        <div class="row">
-                            <div class="form-group col-md-4">
-                                <label class="control-label">Presigned URL Lifespan <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="number" class="form-control" name="backups:presigned_url_lifespan" value="{{ old('backups:presigned_url_lifespan', config('backups.presigned_url_lifespan')) }}">
-                                    <p class="text-muted small">Overrides BACKUP_PRESIGNED_URL_LIFESPAN. Minutes a presigned S3 upload URL handed to Wings stays valid. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-4">
-                                <label class="control-label">Max Part Size <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="number" class="form-control" name="backups:max_part_size" value="{{ old('backups:max_part_size', config('backups.max_part_size')) }}">
-                                    <p class="text-muted small">Overrides BACKUP_MAX_PART_SIZE. Bytes allowed for a single part of an S3 multipart upload; AWS itself caps this at 5GB. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-4">
-                                <label class="control-label">Prune Age <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="number" class="form-control" name="backups:prune_age" value="{{ old('backups:prune_age', config('backups.prune_age')) }}">
-                                    <p class="text-muted small">Overrides BACKUP_PRUNE_AGE. Minutes before a stuck backup is automatically failed; 0 disables this. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Throttle Limit <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="number" class="form-control" name="backups:throttles:limit" value="{{ old('backups:throttles:limit', config('backups.throttles.limit')) }}">
-                                    <p class="text-muted small">Overrides BACKUP_THROTTLE_LIMIT. Backups a user may create within the throttle period below, whether or not they are later deleted. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Throttle Period <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="number" class="form-control" name="backups:throttles:period" value="{{ old('backups:throttles:period', config('backups.throttles.period')) }}">
-                                    <p class="text-muted small">Overrides BACKUP_THROTTLE_PERIOD. Seconds the limit above applies over; 0 disables the throttle. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="box">
-                    <div class="box-header with-border">
-                        <h3 class="box-title">Amazon S3</h3>
-                    </div>
-                    <div class="box-body">
-                        <div class="row">
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Region <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="text" class="form-control" name="backups:disks:s3:region" value="{{ old('backups:disks:s3:region', config('backups.disks.s3.region')) }}">
-                                    <p class="text-muted small">Overrides AWS_DEFAULT_REGION. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Bucket <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="text" class="form-control" name="backups:disks:s3:bucket" value="{{ old('backups:disks:s3:bucket', config('backups.disks.s3.bucket')) }}">
-                                    <p class="text-muted small">Overrides AWS_BACKUPS_BUCKET. The bucket every server's backups are stored under, each inside a folder named after the server's UUID. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Access Key ID <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="text" data-1p-ignore data-lpignore="true" data-bwignore="true" autocomplete="off" spellcheck="false" autocapitalize="off" class="form-control" name="backups:disks:s3:key" value="{{ old('backups:disks:s3:key', config('backups.disks.s3.key')) }}">
-                                    <p class="text-muted small">Overrides AWS_ACCESS_KEY_ID. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Secret Access Key <span class="label label-{{ $s3SecretIsSet ? 'success' : 'default' }}">{{ $s3SecretIsSet ? 'Set' : 'Not Set' }}</span></label>
-                                <div>
-                                    <textarea class="form-control" rows="2" data-1p-ignore data-lpignore="true" data-bwignore="true" autocomplete="off" spellcheck="false" autocapitalize="off" name="backups:disks:s3:secret" placeholder="{{ $s3SecretIsSet ? $secretPlaceholder : '' }}"></textarea>
-                                    <p class="text-muted small">
-                                        Overrides AWS_SECRET_ACCESS_KEY. The stored value is never displayed here: leave this field blank to leave it unchanged.
-                                    </p>
-                                </div>
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="clear_s3_secret" value="1"> Remove the stored secret access key and fall back to the environment value.
-                                    </label>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Endpoint <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="text" class="form-control" name="backups:disks:s3:endpoint" value="{{ old('backups:disks:s3:endpoint', config('backups.disks.s3.endpoint')) }}">
-                                    <p class="text-muted small">Overrides AWS_ENDPOINT. Only needed for an S3-compatible service other than AWS itself. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Storage Class <span class="field-optional"></span></label>
-                                <div>
-                                    <input type="text" class="form-control" name="backups:disks:s3:storage_class" value="{{ old('backups:disks:s3:storage_class', config('backups.disks.s3.storage_class')) }}">
-                                    <p class="text-muted small">Overrides AWS_BACKUPS_STORAGE_CLASS. Leave this field blank to fall back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Path-Style Endpoint <span class="field-optional"></span></label>
-                                <div>
-                                    @php
-                                        $usePathStyleEndpoint = old('backups:disks:s3:use_path_style_endpoint', $usePathStyleEndpointIsSet ? (config('backups.disks.s3.use_path_style_endpoint') ? '1' : '0') : '');
-                                    @endphp
-                                    <select class="form-control" name="backups:disks:s3:use_path_style_endpoint">
-                                        <option value="" @if((string) $usePathStyleEndpoint === '') selected @endif>Environment Default</option>
-                                        <option value="1" @if((string) $usePathStyleEndpoint === '1') selected @endif>Yes</option>
-                                        <option value="0" @if((string) $usePathStyleEndpoint === '0') selected @endif>No</option>
-                                    </select>
-                                    <p class="text-muted small">Overrides AWS_USE_PATH_STYLE_ENDPOINT. Needed for some S3-compatible services that do not support virtual-hosted-style requests. Environment Default removes the override and falls back to the environment value.</p>
-                                </div>
-                            </div>
-                            <div class="form-group col-md-6">
-                                <label class="control-label">Accelerate Endpoint <span class="field-optional"></span></label>
-                                <div>
-                                    @php
-                                        $useAccelerateEndpoint = old('backups:disks:s3:use_accelerate_endpoint', $useAccelerateEndpointIsSet ? (config('backups.disks.s3.use_accelerate_endpoint') ? '1' : '0') : '');
-                                    @endphp
-                                    <select class="form-control" name="backups:disks:s3:use_accelerate_endpoint">
-                                        <option value="" @if((string) $useAccelerateEndpoint === '') selected @endif>Environment Default</option>
-                                        <option value="1" @if((string) $useAccelerateEndpoint === '1') selected @endif>Yes</option>
-                                        <option value="0" @if((string) $useAccelerateEndpoint === '0') selected @endif>No</option>
-                                    </select>
-                                    <p class="text-muted small">Overrides AWS_BACKUPS_USE_ACCELERATE. Only meaningful for AWS itself; leave this set to Environment Default or No for an S3-compatible service that does not support transfer acceleration.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="box">
                     <div class="box-header with-border">
                         <h3 class="box-title">Borg Repository</h3>

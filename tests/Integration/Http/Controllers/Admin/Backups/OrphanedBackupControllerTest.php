@@ -1,6 +1,6 @@
 <?php
 
-namespace Pterodactyl\Tests\Integration\Http\Controllers\Admin\Settings;
+namespace Pterodactyl\Tests\Integration\Http\Controllers\Admin\Backups;
 
 use Ramsey\Uuid\Uuid;
 use Pterodactyl\Models\User;
@@ -27,17 +27,6 @@ class OrphanedBackupControllerTest extends HttpTestCase
      */
     protected $defaultHeaders = ['Accept' => 'text/html'];
 
-    public function testIndexListsOrphanedBackups(): void
-    {
-        $backup = OrphanedBackup::query()->create($this->payload());
-
-        $this->actingAsAdmin()
-            ->get('/admin/settings/backups/orphaned')
-            ->assertOk()
-            ->assertSee($backup->server_name)
-            ->assertSee($backup->backup_uuid);
-    }
-
     public function testDeleteRemovesAnS3BackupAndItsRow(): void
     {
         $backup = OrphanedBackup::query()->create($this->payload([
@@ -56,7 +45,7 @@ class OrphanedBackupControllerTest extends HttpTestCase
         ]);
 
         $this->actingAsAdmin()
-            ->delete("/admin/settings/backups/orphaned/{$backup->id}")
+            ->delete("/admin/backups/orphaned/{$backup->id}")
             ->assertNoContent();
 
         $this->assertDatabaseMissing('orphaned_backups', ['id' => $backup->id]);
@@ -70,28 +59,10 @@ class OrphanedBackupControllerTest extends HttpTestCase
         $daemon->shouldNotReceive('setNode');
 
         $this->actingAsAdmin()
-            ->post("/admin/settings/backups/orphaned/{$backup->id}/forget")
+            ->post("/admin/backups/orphaned/{$backup->id}/forget")
             ->assertNoContent();
 
         $this->assertDatabaseMissing('orphaned_backups', ['id' => $backup->id]);
-    }
-
-    /**
-     * A borg or wings row whose node no longer exists cannot offer Delete at all -
-     * Forget has to be the only action rendered for it.
-     */
-    public function testDeleteIsNotOfferedWhenTheNodeNoLongerExists(): void
-    {
-        $backup = OrphanedBackup::query()->create($this->payload([
-            'disk' => Backup::ADAPTER_WINGS,
-            'node_id' => null,
-        ]));
-
-        $this->actingAsAdmin()
-            ->get('/admin/settings/backups/orphaned')
-            ->assertOk()
-            ->assertSee($backup->backup_uuid)
-            ->assertSee('stored data cannot be removed from here');
     }
 
     private function actingAsAdmin(): self

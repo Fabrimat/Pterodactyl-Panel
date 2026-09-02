@@ -1,6 +1,6 @@
 <?php
 
-namespace Pterodactyl\Tests\Integration\Http\Controllers\Admin\Settings;
+namespace Pterodactyl\Tests\Integration\Http\Controllers\Admin\Backups;
 
 use Pterodactyl\Models\User;
 use Pterodactyl\Models\Backup;
@@ -29,7 +29,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:borg:repository', 'value' => 'ssh://old-host/pterodactyl']);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:repository' => '']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:repository' => '']))
             ->assertSessionHasNoErrors();
 
         $this->assertNull(Setting::query()->where('key', 'settings::backups:disks:borg:repository')->first());
@@ -47,7 +47,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:prune_age', 'value' => '120']);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:prune_age' => '']))
+            ->patch('/admin/backups/settings/general', $this->payload('general', ['backups:prune_age' => '']))
             ->assertSessionHasNoErrors();
 
         $this->assertNull(Setting::query()->where('key', 'settings::backups:prune_age')->first());
@@ -64,7 +64,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:s3:use_path_style_endpoint', 'value' => '1']);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:s3:use_path_style_endpoint' => '']))
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', ['backups:disks:s3:use_path_style_endpoint' => '']))
             ->assertSessionHasNoErrors();
 
         $this->assertNull(Setting::query()->where('key', 'settings::backups:disks:s3:use_path_style_endpoint')->first());
@@ -89,13 +89,13 @@ class BackupSettingsTest extends HttpTestCase
         $settings->forget('settings::backups:disks:s3:use_path_style_endpoint');
         config(['backups.disks.s3.use_path_style_endpoint' => false]);
 
-        $html = $this->actingAsAdmin()->get('/admin/settings/backups')->getContent();
+        $html = $this->actingAsAdmin()->get('/admin/backups/settings/s3')->getContent();
         $this->assertSame('', $this->selectedOptionValue($html, 'backups:disks:s3:use_path_style_endpoint'));
 
         $settings->set('settings::backups:disks:s3:use_path_style_endpoint', '1');
         config(['backups.disks.s3.use_path_style_endpoint' => true]);
 
-        $html = $this->actingAsAdmin()->get('/admin/settings/backups')->getContent();
+        $html = $this->actingAsAdmin()->get('/admin/backups/settings/s3')->getContent();
         $this->assertSame('1', $this->selectedOptionValue($html, 'backups:disks:s3:use_path_style_endpoint'));
     }
 
@@ -105,7 +105,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => $encrypted]);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => '']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:passphrase_secret' => '']))
             ->assertSessionHasNoErrors();
 
         $this->assertSame($encrypted, Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first()->value);
@@ -116,7 +116,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => encrypt('current-secret')]);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['clear_passphrase_secret' => '1']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['clear_passphrase_secret' => '1']))
             ->assertSessionHasNoErrors();
 
         $this->assertNull(Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first());
@@ -125,14 +125,14 @@ class BackupSettingsTest extends HttpTestCase
     public function testAnInvalidCompressionValueIsRejected(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:compression' => 'gzip']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:compression' => 'gzip']))
             ->assertSessionHasErrors(['backups:disks:borg:compression']);
     }
 
     public function testAnInvalidEncryptionModeIsRejected(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:encryption' => 'aes-256']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:encryption' => 'aes-256']))
             ->assertSessionHasErrors(['backups:disks:borg:encryption']);
     }
 
@@ -147,7 +147,7 @@ class BackupSettingsTest extends HttpTestCase
         config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => 'new-secret']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:passphrase_secret' => 'new-secret']))
             ->assertSessionHasErrors(['confirm_passphrase_secret_change']);
     }
 
@@ -157,7 +157,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => encrypt('existing-secret')]);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload([
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', [
                 'backups:disks:borg:passphrase_secret' => 'new-secret',
                 'confirm_passphrase_secret_change' => '1',
             ]))
@@ -170,7 +170,7 @@ class BackupSettingsTest extends HttpTestCase
     public function testPassphraseSecretChangeIsAcceptedWithoutConfirmationWhenNoSecretIsCurrentlySet(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => 'new-secret']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:passphrase_secret' => 'new-secret']))
             ->assertSessionHasNoErrors();
 
         $stored = Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first();
@@ -180,7 +180,7 @@ class BackupSettingsTest extends HttpTestCase
     public function testASecretValueOfZeroIsStoredRatherThanTreatedAsBlank(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:borg:passphrase_secret' => '0']))
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['backups:disks:borg:passphrase_secret' => '0']))
             ->assertSessionHasNoErrors();
 
         $stored = Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first();
@@ -190,7 +190,7 @@ class BackupSettingsTest extends HttpTestCase
     public function testPrivateKeyLineEndingsAreNormalizedToLf(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload([
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', [
                 'backups:disks:borg:ssh:private_key' => "-----BEGIN KEY-----\r\nABCD\r\n-----END KEY-----",
             ]))
             ->assertSessionHasNoErrors();
@@ -202,7 +202,7 @@ class BackupSettingsTest extends HttpTestCase
     public function testKnownHostsLineEndingsAreNormalizedToLf(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload([
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', [
                 'backups:disks:borg:ssh:known_hosts' => "host-one ssh-ed25519 AAAA\r\nhost-two ssh-ed25519 BBBB",
             ]))
             ->assertSessionHasNoErrors();
@@ -239,7 +239,7 @@ class BackupSettingsTest extends HttpTestCase
             }
 
             $this->actingAsAdmin()
-                ->patch('/admin/settings/backups', $this->payload($overrides))
+                ->patch('/admin/backups/settings/borg', $this->payload('borg', $overrides))
                 ->assertSessionHasNoErrors();
 
             $stored = Setting::query()->where('key', 'settings::backups:disks:borg:compression')->first();
@@ -256,7 +256,7 @@ class BackupSettingsTest extends HttpTestCase
     public function testAnAlgorithmLevelComboOutsideTheGrammarIsRejected(): void
     {
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload([
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', [
                 'backups:disks:borg:compression:algorithm' => 'none',
                 'backups:disks:borg:compression:level' => '5',
             ]))
@@ -268,19 +268,25 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:s3:secret', 'value' => encrypt('super-secret-access-key')]);
 
         $this->actingAsAdmin()
-            ->get('/admin/settings/backups')
+            ->get('/admin/backups/settings/s3')
             ->assertDontSee('super-secret-access-key', false);
     }
 
+    /**
+     * The field that triggers the failure and the secret under test now live on the
+     * same S3 page - they can no longer be split across a Borg field and an S3 secret
+     * the way the combined form once allowed - so an invalid path-style endpoint value
+     * is what is used to fail validation here instead.
+     */
     public function testS3SecretIsNotFlashedToTheSessionOnValidationFailure(): void
     {
         $this->actingAsAdmin()
-            ->from('/admin/settings/backups')
-            ->patch('/admin/settings/backups', $this->payload([
-                'backups:disks:borg:encryption' => 'not-a-real-mode',
+            ->from('/admin/backups/settings/s3')
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', [
+                'backups:disks:s3:use_path_style_endpoint' => 'not-a-boolean',
                 'backups:disks:s3:secret' => 'super-secret-access-key',
             ]))
-            ->assertSessionHasErrors(['backups:disks:borg:encryption']);
+            ->assertSessionHasErrors(['backups:disks:s3:use_path_style_endpoint']);
 
         $this->assertArrayNotHasKey('backups:disks:s3:secret', session('_old_input', []));
     }
@@ -291,7 +297,7 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:s3:secret', 'value' => $encrypted]);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['backups:disks:s3:secret' => '']))
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', ['backups:disks:s3:secret' => '']))
             ->assertSessionHasNoErrors();
 
         $this->assertSame($encrypted, Setting::query()->where('key', 'settings::backups:disks:s3:secret')->first()->value);
@@ -302,10 +308,75 @@ class BackupSettingsTest extends HttpTestCase
         Setting::create(['key' => 'settings::backups:disks:s3:secret', 'value' => encrypt('current-s3-secret')]);
 
         $this->actingAsAdmin()
-            ->patch('/admin/settings/backups', $this->payload(['clear_s3_secret' => '1']))
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', ['clear_s3_secret' => '1']))
             ->assertSessionHasNoErrors();
 
         $this->assertNull(Setting::query()->where('key', 'settings::backups:disks:s3:secret')->first());
+    }
+
+    public function testAnUnknownSectionReturnsNotFoundRatherThanAServerError(): void
+    {
+        $this->actingAsAdmin()
+            ->get('/admin/backups/settings/unknown')
+            ->assertNotFound();
+
+        $this->actingAsAdmin()
+            ->patch('/admin/backups/settings/unknown', [])
+            ->assertNotFound();
+    }
+
+    /**
+     * The route constraint is what keeps a section scoped to only its own keys in
+     * the first place; this proves the scoping actually holds end to end rather than
+     * only being reachable in theory. A Borg key submitted to the S3 page must never
+     * be validated or written, since nothing about the S3 page has any business
+     * touching it.
+     */
+    public function testPostingABorgKeyToTheS3PageDoesNotWriteIt(): void
+    {
+        $this->actingAsAdmin()
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', [
+                'backups:disks:borg:repository' => 'ssh://sneaky-host/pterodactyl',
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(Setting::query()->where('key', 'settings::backups:disks:borg:repository')->first());
+    }
+
+    /**
+     * The clear checkboxes are handled by updateSecret() entirely outside
+     * normalize(), which is a separate mechanism from the one
+     * testPostingABorgKeyToTheS3PageDoesNotWriteIt proves - so it needs its own
+     * proof. Losing this secret makes every existing backup permanently
+     * unreadable with no recovery, which is what makes a silent regression here
+     * worse than most.
+     */
+    public function testClearingThePassphraseSecretFromTheS3PageDoesNotWriteIt(): void
+    {
+        $encrypted = encrypt('current-secret');
+        Setting::create(['key' => 'settings::backups:disks:borg:passphrase_secret', 'value' => $encrypted]);
+
+        $this->actingAsAdmin()
+            ->patch('/admin/backups/settings/s3', $this->payload('s3', ['clear_passphrase_secret' => '1']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($encrypted, Setting::query()->where('key', 'settings::backups:disks:borg:passphrase_secret')->first()->value);
+    }
+
+    /**
+     * The mirror of testClearingThePassphraseSecretFromTheS3PageDoesNotWriteIt: the
+     * same updateSecret() guard has to hold in both directions.
+     */
+    public function testClearingTheS3SecretFromTheBorgPageDoesNotWriteIt(): void
+    {
+        $encrypted = encrypt('current-s3-secret');
+        Setting::create(['key' => 'settings::backups:disks:s3:secret', 'value' => $encrypted]);
+
+        $this->actingAsAdmin()
+            ->patch('/admin/backups/settings/borg', $this->payload('borg', ['clear_s3_secret' => '1']))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($encrypted, Setting::query()->where('key', 'settings::backups:disks:s3:secret')->first()->value);
     }
 
     private function actingAsAdmin(): self
@@ -327,18 +398,25 @@ class BackupSettingsTest extends HttpTestCase
         return $option[1] ?? null;
     }
 
-    private function payload(array $overrides = []): array
+    /**
+     * Every field currently required on the given section, so a test only has to
+     * name the field it actually cares about and let this fill in the rest.
+     */
+    private function payload(string $section, array $overrides = []): array
     {
-        return array_merge([
-            'backups:default' => Backup::ADAPTER_BORG,
-            'backups:disks:borg:encryption' => 'repokey-blake2',
-            'backups:disks:borg:mode' => 'incremental',
-            'backups:disks:borg:compression' => 'zstd,3',
-            'backups:disks:borg:lock_wait' => 600,
-            'backups:disks:borg:checkpoint_interval' => 1800,
-            'backups:disks:borg:upload_ratelimit' => 0,
-            'backups:disks:s3:use_path_style_endpoint' => '0',
-            'backups:disks:s3:use_accelerate_endpoint' => '0',
-        ], $overrides);
+        $base = match ($section) {
+            'general' => ['backups:default' => Backup::ADAPTER_WINGS],
+            's3' => [],
+            'borg' => [
+                'backups:disks:borg:encryption' => 'repokey-blake2',
+                'backups:disks:borg:mode' => 'incremental',
+                'backups:disks:borg:compression' => 'zstd,3',
+                'backups:disks:borg:lock_wait' => 600,
+                'backups:disks:borg:checkpoint_interval' => 1800,
+                'backups:disks:borg:upload_ratelimit' => 0,
+            ],
+        };
+
+        return array_merge($base, $overrides);
     }
 }

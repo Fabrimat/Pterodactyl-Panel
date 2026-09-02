@@ -111,6 +111,17 @@
                                 <i class="fa fa-users"></i> <span>Users</span>
                             </a>
                         </li>
+                        <li class="header">BACKUPS</li>
+                        <li class="{{ Route::currentRouteName() !== 'admin.backups' ?: 'active' }}">
+                            <a href="{{ route('admin.backups') }}">
+                                <i class="fa fa-archive"></i> <span>Backups</span>
+                            </a>
+                        </li>
+                        <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.backups.settings') ?: 'active' }}">
+                            <a href="{{ route('admin.backups.settings', 'general') }}">
+                                <i class="fa fa-sliders"></i> <span>Backup Settings</span>
+                            </a>
+                        </li>
                         <li class="header">SERVICE MANAGEMENT</li>
                         <li class="{{ ! starts_with(Route::currentRouteName(), 'admin.mounts') ?: 'active' }}">
                             <a href="{{ route('admin.mounts') }}">

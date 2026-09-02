@@ -1,6 +1,6 @@
 <?php
 
-namespace Pterodactyl\Http\Requests\Admin\Settings;
+namespace Pterodactyl\Http\Requests\Admin\Backups;
 
 use Pterodactyl\Models\Backup;
 use Illuminate\Validation\Rule;
@@ -11,9 +11,69 @@ use Pterodactyl\Services\Backups\BorgConfigurationService;
 class BackupSettingsFormRequest extends AdminFormRequest
 {
     /**
-     * Return all the rules to apply to this request's data.
+     * Every key allRules() may validate belongs to exactly one section here. Scoping
+     * rules() to the section this request was made against is what makes the write
+     * path safe to derive from the same list: normalize() already only ever returns
+     * keys present in the request via Request::only(), so a partial submission was
+     * never at risk of losing another section's stored override. What scoping
+     * actually closes is the opposite hazard: without it, a request submitted to,
+     * say, the S3 page could still validate and write a Borg key, or any other
+     * section's key, simply by including it in the payload.
+     */
+    public const SECTIONS = [
+        'general' => [
+            'backups:default',
+            'backups:presigned_url_lifespan',
+            'backups:max_part_size',
+            'backups:prune_age',
+            'backups:throttles:limit',
+            'backups:throttles:period',
+        ],
+        's3' => [
+            'backups:disks:s3:region',
+            'backups:disks:s3:bucket',
+            'backups:disks:s3:key',
+            'backups:disks:s3:secret',
+            'backups:disks:s3:endpoint',
+            'backups:disks:s3:use_path_style_endpoint',
+            'backups:disks:s3:use_accelerate_endpoint',
+            'backups:disks:s3:storage_class',
+            'clear_s3_secret',
+        ],
+        'borg' => [
+            'backups:disks:borg:repository',
+            'backups:disks:borg:passphrase_secret',
+            'backups:disks:borg:encryption',
+            'backups:disks:borg:mode',
+            'backups:disks:borg:compression',
+            'backups:disks:borg:compression:algorithm',
+            'backups:disks:borg:compression:level',
+            'backups:disks:borg:compression:auto',
+            'backups:disks:borg:ssh:private_key',
+            'backups:disks:borg:ssh:known_hosts',
+            'backups:disks:borg:lock_wait',
+            'backups:disks:borg:checkpoint_interval',
+            'backups:disks:borg:upload_ratelimit',
+            'clear_passphrase_secret',
+            'clear_ssh_private_key',
+        ],
+    ];
+
+    /**
+     * Returns only the rules for the section this request was made against. This is
+     * what keeps a rule required on one section - Borg's lock wait, for instance -
+     * from rejecting a submission made to a page that has no reason to carry it.
      */
     public function rules(): array
+    {
+        return array_intersect_key($this->allRules(), array_flip(self::SECTIONS[$this->route('section')]));
+    }
+
+    /**
+     * The full rule set across every section, keyed the same way SECTIONS lists them.
+     * rules() is what actually narrows this down to the current section.
+     */
+    protected function allRules(): array
     {
         return [
             'backups:default' => ['required', Rule::in([Backup::ADAPTER_WINGS, Backup::ADAPTER_AWS_S3, Backup::ADAPTER_BORG])],

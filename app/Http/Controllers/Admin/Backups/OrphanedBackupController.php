@@ -1,8 +1,7 @@
 <?php
 
-namespace Pterodactyl\Http\Controllers\Admin\Settings;
+namespace Pterodactyl\Http\Controllers\Admin\Backups;
 
-use Illuminate\View\View;
 use Illuminate\Http\Response;
 use Pterodactyl\Models\OrphanedBackup;
 use Pterodactyl\Http\Controllers\Controller;
@@ -12,20 +11,6 @@ class OrphanedBackupController extends Controller
 {
     public function __construct(private DeleteOrphanedBackupService $deleteOrphanedBackupService)
     {
-    }
-
-    /**
-     * Renders the list of backups whose server has since been deleted, newest orphan
-     * first.
-     */
-    public function index(): View
-    {
-        $backups = OrphanedBackup::query()
-            ->with('node')
-            ->orderByDesc('orphaned_at')
-            ->paginate(25);
-
-        return view('admin.settings.backups-orphaned', ['backups' => $backups]);
     }
 
     /**
