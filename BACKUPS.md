@@ -93,7 +93,6 @@ living inside Borg itself.
 | `BORG_LOCK_WAIT` | `600` | seconds to wait on the repository lock before failing the backup |
 | `BORG_CHECKPOINT_INTERVAL` | `1800` | seconds between checkpoints during a long backup |
 | `BORG_UPLOAD_RATELIMIT` | `0` | KiB/s, 0 disables |
-| `BORG_ONE_FILE_SYSTEM` | `true` | do not cross filesystem boundaries |
 
 `zstd,3` is the default because it sits close to `lz4`'s speed while
 compressing meaningfully better. Drop to `lz4` on a node that is CPU-bound
@@ -158,8 +157,7 @@ Both channels carry the identical object - one contract, not two:
   "ssh_known_hosts": null,
   "lock_wait": 600,
   "checkpoint_interval": 1800,
-  "upload_ratelimit": 0,
-  "one_file_system": true
+  "upload_ratelimit": 0
 }
 ```
 
@@ -185,17 +183,39 @@ What this puts on Wings, stated as requirements rather than suggestions:
   Wings needs to solve now.
 * Download streams `borg export-tar` against the object it pulled, so what
   the user downloads is an ordinary tar file they can open with anything.
-  Restore, driven by the pushed object, is `borg extract`.
+  Restore, driven by the pushed object, materializes the archive into the
+  server's data directory. How it gets there is Wings' choice: writing the
+  files straight out of Borg would skip the disk-quota check, the ownership
+  fixing and the symlink sandboxing that every other restore on the node goes
+  through, so routing the archive back through the node's own restore path is
+  the expected shape rather than a workaround.
 * Delete should acknowledge the request and do the work after: `borg delete`,
   and especially the `borg compact` that should follow it, can take minutes
   on a large repository, which is longer than the panel's Guzzle timeout on
-  that call allows for. Wings should run compaction on its own cadence rather
-  than inline on every delete.
+  that call allows for. Compaction should happen opportunistically after a
+  delete, coalesced per repository. It deliberately does not say "on a
+  schedule": a scheduled compaction would need the passphrase, and for an
+  `ssh://` repository the SSH key, sitting on the node between operations,
+  which is the exact thing deriving them per request exists to avoid.
 * The panel sends ignore patterns in the existing `ignore` field, as
-  newline-separated gitignore-shaped strings - that is not Borg's `--pattern`
-  syntax. Wings has to translate them itself, so that a file the user excluded
-  is actually absent from the archive rather than merely filtered out of what
-  gets listed afterward.
+  newline-separated gitignore-shaped strings, which is not Borg's `--pattern`
+  syntax. The requirement is on the outcome, not the means: a file excluded by
+  that list must be absent from the archive, not merely filtered out of what
+  gets listed afterward. Translating the patterns and never letting Borg walk
+  the tree at all are both acceptable ways to get there, and they are not
+  equally easy to get right - Borg patterns are first-match-wins where
+  gitignore is last-match-wins, and a trailing slash means different things in
+  each.
+* Wings targets Borg 1.2 or newer, below 2.0. The `encryption` vocabulary
+  above and the repository creation this document describes are 1.x; Borg 2.0
+  renames repository creation and changes the encryption mode names, so
+  supporting it is a revision of this contract rather than a change Wings can
+  absorb on its own.
+* Borg exits 1 for warnings, not failures, and the most common one - a file
+  changed while it was being read - is routine on a running game server. Only
+  an exit code of 2 or higher is a failed backup. A backup can therefore be
+  reported successful with warnings in the node's logs, and that is correct
+  rather than something to investigate.
 
 ## Limitations
 

@@ -102,9 +102,6 @@ return [
 
             // KiB/s, 0 disables the limit.
             'upload_ratelimit' => (int) env('BORG_UPLOAD_RATELIMIT', 0),
-
-            // Whether Borg should stay within a single filesystem while archiving.
-            'one_file_system' => (bool) env('BORG_ONE_FILE_SYSTEM', true),
         ],
     ],
 ];

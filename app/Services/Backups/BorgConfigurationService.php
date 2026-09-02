@@ -47,7 +47,6 @@ class BorgConfigurationService
             'lock_wait' => config('backups.disks.borg.lock_wait'),
             'checkpoint_interval' => config('backups.disks.borg.checkpoint_interval'),
             'upload_ratelimit' => config('backups.disks.borg.upload_ratelimit'),
-            'one_file_system' => config('backups.disks.borg.one_file_system'),
         ];
     }
 
