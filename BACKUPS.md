@@ -73,14 +73,22 @@ Three things worth knowing before choosing it, not after:
 * There is nothing to deduplicate against, since every repository starts
   empty. Every backup transfers and stores its full size. This is the entire
   point of the mode and also its price.
-* Deleting the only archive in a snapshot repository leaves an empty
-  repository skeleton behind. `borg compact` reclaims the archive's data but
-  does not remove the repository directory itself.
-* Each repository gets its own client-side cache on the node. Deleting an
-  archive does not drop that cache - only deleting the whole repository does,
-  which the panel never asks for. In snapshot mode that is one cache
-  directory per backup, accumulating on the node for as long as the
-  repository exists.
+* The node itself accumulates a permanent, unbounded cache - the more
+  serious of the two residues below, because it is the node's own disk that
+  fills up rather than the backup storage host. Borg keeps a client-side
+  cache per repository under Wings' own cache directory, on the node. In
+  incremental mode that cache is one per server, so it is bounded by how
+  many servers the node runs. In snapshot mode it is one per backup instead:
+  deleting an archive does not drop its repository's cache, only deleting
+  the whole repository does, which the panel never asks for, so every
+  snapshot backup ever taken on that node leaves its cache behind for good.
+  This is disk consumption that grows with the number of snapshot backups
+  ever taken there, nothing more - not data loss, and not a failure of any
+  backup - but it is disk consumption on the node running servers, which is
+  a worse place for it to land than the backup storage host.
+* Deleting the only archive in a snapshot repository also leaves an empty
+  repository skeleton behind, on the storage host. `borg compact` reclaims
+  the archive's data but does not remove the repository directory itself.
 
 ### Where a backup's repository is recorded
 
@@ -553,15 +561,16 @@ Three things worth knowing before relying on Delete:
   direction, so the failure is left to propagate: the transaction rolls
   back and the row stays exactly where it was, ready to retry once Wings
   registers the route.
-* That also means once the route exists, an orphan on the plain `wings`
-  local adapter needs a second look. That path really does look for a
-  file on the node's own disk, so a 404 from it can be a genuine, honest
-  answer - the file is actually gone - and not just "the route does not
-  exist yet". With no 404 tolerance left, that case will fail Delete rather
-  than quietly succeed, and an operator will need Forget for it instead.
-  That is still the safe failure direction, and the route is not built yet,
-  so this is a note for whoever wires it up rather than a defect in what is
-  here now.
+* Once that route exists, the fix belongs on the panel side, as a branch on
+  the response it gets back, not as any change to what the node answers. A
+  404 from that route will then mean precisely "this node has no such
+  file" - a genuine, honest answer for the plain `wings` local adapter,
+  whose delete path really does look for a file on disk - so a 404 is the
+  one response safe to treat as already gone and drop the row for.
+  Anything else still keeps the row and surfaces the error. Having the node
+  answer 204 for a file it never found was considered instead and rejected:
+  that would have the node claim it removed something it never saw, and it
+  would blunt a signal the panel needs to read honestly.
 * Once that route exists and behaves like the rest of the wire contract, the
   same acknowledge-then-work pattern applies to it as to the existing
   per-server delete: the borg deletion is acknowledged before it actually

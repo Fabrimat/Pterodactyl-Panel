@@ -67,10 +67,10 @@ completion state. With a deduplicating backend there is much more worth showing:
 - Progress and failure detail during creation and restore.
 
 Three follow-ups from the Borg work belong here too: a reconciliation command
-that sweeps up repositories orphaned by deleted servers along with the empty
-repository skeletons and per-backup client caches that snapshot mode leaves
-behind on the node after a delete, and time-based retention as a panel
-scheduled command rather than anything driven by Borg's own `prune`.
+that sweeps up repositories orphaned by deleted servers along with the
+per-backup client caches and empty repository skeletons that snapshot mode
+leaves behind on the node after a delete, and time-based retention as a
+panel scheduled command rather than anything driven by Borg's own `prune`.
 
 ### Minecraft world manager
 
