@@ -270,6 +270,23 @@ to set up SSH material for a local repository on its own account. There is no
 `BORG_RSH` to consult in that case, so writing a private key to disk there is
 key material at rest for an operation that could never use it.
 
+Those two checks are a pair, and the pair has a failure mode worth naming
+because it is not obvious from either side alone. Read on its own, each looks
+redundant: the panel's check appears unnecessary to someone who has confirmed
+the node declines the key anyway, and the node's check appears unreachable to
+someone who has confirmed the panel never sends it. Both readings are correct,
+and both are only correct while the other check is still in place. So the
+protection does not weaken gradually. It survives the first removal, which
+looks justified, and is then silently annulled by a second removal in a
+different repository that also looks justified, with neither review able to see
+the other.
+
+The practical rule that follows: neither check may be removed on evidence
+gathered from the opposite side, and neither one's comment should rest its
+justification on the other's behaviour. Each has a reason that stands on its
+own - do not send a secret that cannot be used, and do not write a secret to
+disk for an operation that cannot use it - and those are the reasons to keep.
+
 What this puts on Wings, stated as requirements rather than suggestions:
 
 * **Wings must never log the `borg` object, on either channel.** It carries
