@@ -29,7 +29,7 @@ class OrphanBackupsListener
             ->get();
 
         foreach ($backups as $backup) {
-            /** @var Backup $backup */
+            /* @var Backup $backup */
             OrphanedBackup::query()->create([
                 'backup_uuid' => $backup->uuid,
                 'server_uuid' => $server->uuid,

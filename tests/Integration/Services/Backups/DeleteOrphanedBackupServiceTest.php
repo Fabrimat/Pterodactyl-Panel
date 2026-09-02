@@ -3,8 +3,8 @@
 namespace Pterodactyl\Tests\Integration\Services\Backups;
 
 use Ramsey\Uuid\Uuid;
-use Pterodactyl\Models\Node;
 use GuzzleHttp\Psr7\Request;
+use Pterodactyl\Models\Node;
 use GuzzleHttp\Psr7\Response;
 use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\Location;

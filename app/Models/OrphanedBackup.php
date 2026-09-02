@@ -23,7 +23,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * @property string|null $borg_repository
  * @property \Illuminate\Support\Carbon $backup_created_at
  * @property \Illuminate\Support\Carbon $orphaned_at
- * @property \Pterodactyl\Models\Node|null $node
+ * @property Node|null $node
  */
 class OrphanedBackup extends Model
 {
