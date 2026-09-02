@@ -172,6 +172,59 @@ class BorgConfigurationServiceTest extends TestCase
         $this->handle($this->server());
     }
 
+    #[DataProvider('remoteRepositories')]
+    public function testSshMaterialIsSentForARemoteRepository(string $base): void
+    {
+        config([
+            'backups.disks.borg.repository' => $base,
+            'backups.disks.borg.ssh.private_key' => 'PRIVATE KEY BODY',
+            'backups.disks.borg.ssh.known_hosts' => 'HOST KEY LINE',
+        ]);
+
+        $config = $this->handle($this->server());
+
+        $this->assertSame('PRIVATE KEY BODY', $config['ssh_private_key']);
+        $this->assertSame('HOST KEY LINE', $config['ssh_known_hosts']);
+    }
+
+    #[DataProvider('localRepositories')]
+    public function testSshMaterialIsWithheldForALocalRepository(string $base): void
+    {
+        config([
+            'backups.disks.borg.repository' => $base,
+            'backups.disks.borg.ssh.private_key' => 'PRIVATE KEY BODY',
+            'backups.disks.borg.ssh.known_hosts' => 'HOST KEY LINE',
+        ]);
+
+        $config = $this->handle($this->server());
+
+        $this->assertNull($config['ssh_private_key']);
+        $this->assertNull($config['ssh_known_hosts']);
+    }
+
+    /**
+     * Borg treats the scp-style form as remote just as it does an ssh:// URL, so it has
+     * to be classified as remote here too. Getting that one wrong would withhold the key
+     * from a repository that needs it and fail every backup against it.
+     */
+    public static function remoteRepositories(): array
+    {
+        return [
+            ['ssh://borg@backup.example.com:22/./pterodactyl'],
+            ['ssh://borg@backup.example.com/./pterodactyl'],
+            ['borg@backup.example.com:pterodactyl'],
+        ];
+    }
+
+    public static function localRepositories(): array
+    {
+        return [
+            ['/var/lib/pterodactyl/borg'],
+            ['/srv/borg'],
+            ['file:///var/lib/pterodactyl/borg'],
+        ];
+    }
+
     private function server(string $uuid = '9c858901-8a57-4791-81fe-4c455b099bc9'): Server
     {
         return Server::factory()->make(['uuid' => $uuid]);

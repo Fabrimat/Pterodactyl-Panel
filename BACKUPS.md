@@ -226,6 +226,19 @@ Both channels carry the identical object - one contract, not two:
 }
 ```
 
+`ssh_private_key` and `ssh_known_hosts` are populated only when the repository
+is one the node reaches over SSH; for a local path both are null. Borg counts
+both an `ssh://` URL and the scp-style `user@host:path` as remote, so the panel
+classifies anything that is not unambiguously a local path as remote. That
+direction is deliberate: sending a key that turns out not to be needed wastes
+it, while withholding one that is needed fails every backup against that
+repository.
+
+A node should not rely on the panel withholding it, though, and should decline
+to set up SSH material for a local repository on its own account. There is no
+`BORG_RSH` to consult in that case, so writing a private key to disk there is
+key material at rest for an operation that could never use it.
+
 What this puts on Wings, stated as requirements rather than suggestions:
 
 * **Wings must never log the `borg` object, on either channel.** It carries

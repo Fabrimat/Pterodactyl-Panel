@@ -36,14 +36,20 @@ class BorgConfigurationService
      */
     public function handle(Server $server, string $archive): array
     {
+        $repository = $this->repository($server);
+        $remote = $this->isRemote($repository);
+
         return [
-            'repository' => $this->repository($server),
+            'repository' => $repository,
             'archive' => $archive,
             'passphrase' => $this->passphrase($server),
             'encryption' => $this->encryption(),
             'compression' => $this->compression(),
-            'ssh_private_key' => config('backups.disks.borg.ssh.private_key'),
-            'ssh_known_hosts' => config('backups.disks.borg.ssh.known_hosts'),
+            // Only sent for a repository the node reaches over SSH. Handing a private
+            // key to a node for an operation that cannot use it puts key material on
+            // its disk for nothing.
+            'ssh_private_key' => $remote ? config('backups.disks.borg.ssh.private_key') : null,
+            'ssh_known_hosts' => $remote ? config('backups.disks.borg.ssh.known_hosts') : null,
             'lock_wait' => config('backups.disks.borg.lock_wait'),
             'checkpoint_interval' => config('backups.disks.borg.checkpoint_interval'),
             'upload_ratelimit' => config('backups.disks.borg.upload_ratelimit'),
@@ -64,6 +70,18 @@ class BorgConfigurationService
         }
 
         return rtrim((string) $base, '/') . '/' . $server->uuid;
+    }
+
+    /**
+     * Whether a repository is one Borg reaches over SSH rather than a path on the node
+     * itself. Borg accepts both an ssh:// URL and the scp-style user@host:path form, so
+     * anything that is not unambiguously a local path counts as remote here. That
+     * direction is deliberate: withholding the key from a repository that needs it
+     * fails every backup, while sending it to a local repository only wastes it.
+     */
+    protected function isRemote(string $repository): bool
+    {
+        return !str_starts_with($repository, '/') && !str_starts_with($repository, 'file://');
     }
 
     /**
