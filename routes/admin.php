@@ -69,13 +69,17 @@ Route::group(['prefix' => 'settings'], function () {
     Route::get('/mail', [Admin\Settings\MailController::class, 'index'])->name('admin.settings.mail');
     Route::get('/advanced', [Admin\Settings\AdvancedController::class, 'index'])->name('admin.settings.advanced');
     Route::get('/backups', [Admin\Settings\BackupController::class, 'index'])->name('admin.settings.backups');
+    Route::get('/backups/orphaned', [Admin\Settings\OrphanedBackupController::class, 'index'])->name('admin.settings.backups.orphaned');
 
     Route::post('/mail/test', [Admin\Settings\MailController::class, 'test'])->name('admin.settings.mail.test');
+    Route::post('/backups/orphaned/{orphaned_backup:id}/forget', [Admin\Settings\OrphanedBackupController::class, 'forget'])->name('admin.settings.backups.orphaned.forget');
 
     Route::patch('/', [Admin\Settings\IndexController::class, 'update']);
     Route::patch('/mail', [Admin\Settings\MailController::class, 'update']);
     Route::patch('/advanced', [Admin\Settings\AdvancedController::class, 'update']);
     Route::patch('/backups', [Admin\Settings\BackupController::class, 'update']);
+
+    Route::delete('/backups/orphaned/{orphaned_backup:id}', [Admin\Settings\OrphanedBackupController::class, 'delete'])->name('admin.settings.backups.orphaned.delete');
 });
 
 /*
