@@ -15,9 +15,11 @@ against.
 ## How it works
 
 Every server gets its own Borg repository, at `<repository base>/<server
-uuid>`. The archive inside a repository is named after the backup's UUID, so
-one archive is one backup and the panel's existing restore-the-whole-backup
-flow needs no change to work with Borg's archive model.
+uuid>`, under the default incremental mode - see **Backup mode: incremental
+versus snapshot** below for the alternative. The archive inside a repository
+is named after the backup's UUID, so one archive is one backup and the
+panel's existing restore-the-whole-backup flow needs no change to work with
+Borg's archive model.
 
 One repository per server is deliberate, not a first pass that will later be
 collapsed into one shared repository. Borg has no per-archive authorization
@@ -27,6 +29,81 @@ key read another server's data. Splitting per server also keeps the blast
 radius of repository corruption to a single server. The cost is real: many
 game servers hold identical jars and binaries, and none of that is
 deduplicated across the boundary. That trade is intentional.
+
+## Backup mode: incremental versus snapshot
+
+`BORG_BACKUP_MODE` (`backups.disks.borg.mode`) chooses which of two repository
+layouts a new backup is written into. It defaults to `incremental`, the
+layout described above and the one every panel already running this adapter
+keeps using unless it opts in to the other:
+
+* `incremental` - one repository per server, at `<repository base>/<server
+  uuid>`, holding every archive that server has ever produced. This is the
+  layout the deduplication described below depends on.
+* `snapshot` - one repository per backup instead, at `<repository
+  base>/<server uuid>_<backup uuid>`. Each one is self-contained and shares
+  nothing with any other repository, including the other backups of the same
+  server.
+
+A snapshot repository sits as a flat sibling of the per-server repository
+rather than nested inside it, and that placement is load-bearing rather than
+a style choice. Two things about Borg rule out the nested alternative,
+`<repository base>/<server uuid>/<backup uuid>`:
+
+* `borg init` creates the repository directory with a single-level `mkdir`.
+  It only creates missing intermediate directories when passed
+  `--make-parent-dirs`, which Wings does not. A nested path has two missing
+  parents and would fail at init on every server's very first snapshot
+  backup over `ssh://`, which is the supported mode.
+* Borg refuses outright to create a repository underneath an existing one -
+  it walks every parent directory looking for a repository README and aborts
+  if it finds one. Any server that has ever run under incremental mode
+  already has a repository at `<repository base>/<server uuid>`, so nesting
+  a snapshot repository under it would fail for that reason too.
+
+Changing the mode only affects backups created after the change. An existing
+backup keeps resolving to the repository it was actually written to, no
+matter what the mode is set to afterwards - see **Where a backup's
+repository is recorded** below for how that is arranged.
+
+### The cost of snapshot mode
+
+Three things worth knowing before choosing it, not after:
+
+* There is nothing to deduplicate against, since every repository starts
+  empty. Every backup transfers and stores its full size. This is the entire
+  point of the mode and also its price.
+* Deleting the only archive in a snapshot repository leaves an empty
+  repository skeleton behind. `borg compact` reclaims the archive's data but
+  does not remove the repository directory itself.
+* Each repository gets its own client-side cache on the node. Deleting an
+  archive does not drop that cache - only deleting the whole repository does,
+  which the panel never asks for. In snapshot mode that is one cache
+  directory per backup, accumulating on the node for as long as the
+  repository exists.
+
+### Where a backup's repository is recorded
+
+A nullable `borg_repository` column on `backups` holds the backup's
+repository, as a suffix relative to the configured base - never an absolute
+URL. It is recorded once, when the backup is created, and used verbatim for
+every restore, delete and download of that backup afterwards.
+
+`NULL` means the legacy per-server layout, `<repository base>/<server
+uuid>`, unconditionally, regardless of what the mode is set to now. An
+incremental backup records `NULL` rather than the server UUID for the same
+reason: a pre-column backup and one taken under incremental mode resolve to
+the identical repository, so there is nothing to distinguish between them and
+nothing worth recording.
+
+This is also why changing the mode does not strand existing backups the way
+changing `BORG_REPOSITORY` still does, and for the same reason it always did.
+The column stores a suffix, relative to the base, precisely so that the one
+kind of base change that works today keeps working: rsync the whole
+repository tree to a new host and update `BORG_REPOSITORY`. An absolute URL
+recorded per row instead would have defeated that - every existing backup
+would have kept pointing at the dead host regardless of where
+`BORG_REPOSITORY` was updated to.
 
 ## Deduplication and incrementals
 
@@ -50,6 +127,13 @@ changed byte near the start alters everything after it. Deduplication would
 collapse to nearly nothing and every backup would quietly transfer in full. A
 second backup of an unchanged server costing roughly as much as the first is
 that symptom.
+
+Everything above is true of incremental mode, which is where the two
+measured archives actually live, and false of snapshot mode by design: a
+snapshot repository starts empty every time, so there is nothing prior in it
+to deduplicate against. That is not this section's chunking failing to do
+its job - it is the direct, intended consequence of choosing that layout. See
+**Backup mode: incremental versus snapshot** above.
 
 ## Passphrase custody
 
@@ -81,7 +165,10 @@ This has consequences worth stating plainly:
   without the other recovers nothing, and an environment copy left over from
   before the save is stale and derives the wrong passphrases.
 * The server UUIDs a recovery needs are recoverable from the repository
-  directory names themselves, in both cases.
+  directory names themselves, in both cases, and regardless of which
+  repository mode was in force when a given repository was written - see
+  **Opening a repository without the panel** below for how the directory
+  name differs between the two.
 * The `borg:v1:` prefix is domain separation and a version marker, not
   decoration. Rotation is not supported in this version, and the settings page
   does not provide it: replacing the secret there abandons access to every
@@ -130,13 +217,25 @@ SECRET_IN_FORCE=...
 
 export BORG_PASSPHRASE=$(printf 'borg:v1:%s' "$SERVER_UUID"     | openssl dgst -sha256 -hmac "$SECRET_IN_FORCE" -hex     | awk '{print $NF}')
 
+# Incremental mode: one repository per server.
 borg list "$BORG_REPOSITORY/$SERVER_UUID"
+
+# Snapshot mode: one repository per backup, named after both UUIDs.
+borg list "$BORG_REPOSITORY/${SERVER_UUID}_${BACKUP_UUID}"
 ```
 
-The server UUIDs are the repository directory names, so a repository base is
+The passphrase derivation above is identical either way - it only ever
+depends on the server UUID, never on which repository the backup landed in -
+so the same `BORG_PASSPHRASE` line opens a repository written under either
+mode. What differs is the directory name. Under incremental mode the server
+UUID is the repository directory name outright, so a repository base is
 self-describing: an operator holding the secret can enumerate and open every
-repository in it with nothing but Borg. This is the disaster recovery path, and
-it is worth testing before it is needed rather than after.
+repository in it with nothing but Borg. Under snapshot mode a directory name
+is `<server uuid>_<backup uuid>` instead - the server UUID is still there, as
+the segment before the first underscore, since a UUID never itself contains
+one - so the same enumeration still works, just one directory per backup
+rather than one per server. Either way this is the disaster recovery path,
+and it is worth testing before it is needed rather than after.
 
 ## Retention
 
@@ -168,10 +267,11 @@ environment only, so on such a panel the page is display without effect.
 | Variable | Default | Meaning |
 |---|---|---|
 | `APP_BACKUP_DRIVER` | `wings` | set to `borg` to make it the default adapter |
-| `BORG_REPOSITORY` | none, required | base location; one repository per server underneath it |
+| `BORG_REPOSITORY` | none, required | base location; every repository this adapter creates sits underneath it, in the layout `BORG_BACKUP_MODE` selects |
 | `BORG_PASSPHRASE_SECRET` | none, required | passphrase derivation secret |
 | `BORG_ENCRYPTION` | `repokey-blake2` | `repokey-blake2`, `keyfile-blake2`, `repokey`, `keyfile`, `authenticated-blake2`, `authenticated`, `none` |
 | `BORG_COMPRESSION` | `zstd,3` | passed to `borg --compression` verbatim: `none`, `lz4`, `zstd[,1-22]`, `zlib[,0-9]`, `lzma[,0-9]`, optionally `auto,` prefixed |
+| `BORG_BACKUP_MODE` | `incremental` | `incremental` or `snapshot` - see **Backup mode: incremental versus snapshot** above |
 | `BORG_SSH_PRIVATE_KEY` | none | key for a remote `ssh://` repository |
 | `BORG_SSH_KNOWN_HOSTS` | none | host verification for the same |
 | `BORG_LOCK_WAIT` | `600` | seconds to wait on the repository lock before failing the backup |
@@ -308,6 +408,15 @@ Both channels carry the identical object - one contract, not two:
 }
 ```
 
+The object has no field for which repository layout mode produced it. The
+mode is already fully encoded in `repository` itself - a snapshot
+repository's path simply ends in `<server uuid>_<backup uuid>` rather than
+`<server uuid>` - so Wings never needs to know which mode built a given
+repository, only where it is. That absence is deliberate rather than
+something to fix: a `mode` field would duplicate information the path
+already carries and give Wings a second thing to trust instead of the one it
+already has.
+
 `ssh_private_key` and `ssh_known_hosts` are populated only when the repository
 is one the node reaches over SSH; for a local path both are null. Borg counts
 both an `ssh://` URL and the scp-style `user@host:path` as remote, so the panel
@@ -394,14 +503,86 @@ What this puts on Wings, stated as requirements rather than suggestions:
   reported successful with warnings in the node's logs, and that is correct
   rather than something to investigate.
 
+## Orphaned backups
+
+`Server` does not use `SoftDeletes`, so deleting one hard-deletes the row,
+and the `backups` table's `server_id` foreign key - `onDelete('cascade')` -
+hard-deletes every backup row belonging to it in the same stroke. Nothing
+about that cascade touches the stored data itself: the Borg repository, the
+S3 object or the node's own archive is left exactly where it was, and once
+the cascade runs the panel no longer has a row anywhere saying it exists.
+
+A listener on the existing `Server\Deleting` event closes that gap. It runs
+inside `ServerDeletionService`'s own transaction, before the server row (and
+the backup rows cascaded from it) are actually removed, and copies every
+successful, completed, non-deleted backup into a new `orphaned_backups`
+table - a failed or still-running backup never finished writing anything
+worth tracking, and a soft-deleted one already had its data removed by
+`DeleteBackupService`. Running inside that same transaction means a rolled
+back server deletion rolls the orphan rows back with it: an orphan is never
+recorded for a server that is still there. A backup's `borg_repository` is
+carried onto its orphan row untouched, so an orphaned snapshot backup still
+resolves to the repository it actually was written to rather than falling
+back to the legacy per-server path.
+
+An admin page at `/admin/settings/backups/orphaned` lists what has
+accumulated there, newest orphan first, with two actions per row:
+
+* **Delete** removes the stored data and then the row. For `s3` the panel
+  deletes the object directly with credentials it already holds, so this
+  works today. For `borg` and `wings` it sends `DELETE
+  /api/backups/{backup-uuid}` to the node the backup belonged to - a
+  node-scoped route, since there is no longer a `Server` model to route a
+  request through.
+* **Forget** removes only the panel row and leaves the stored data behind.
+  It is the escape hatch for a node that no longer exists to be asked
+  anything, not the normal path, and it is the only action offered once a
+  row's node has itself been deleted.
+
+Three things worth knowing before relying on Delete:
+
+* **Needs Wings work.** The node-scoped delete route above does not exist in
+  Wings yet, so today Delete for a borg or wings orphan fails outright:
+  there is no tolerance for a 404 response here, unlike the regular
+  per-server delete path. That is deliberate rather than an oversight. A row
+  that outlives its data is only a tidiness problem, one an operator can
+  resolve by hand with Forget once they know the data is really gone; a row
+  that is deleted while its data survives is unrecoverable, because that row
+  was the only remaining record that the data existed at all. Given that
+  choice, a failure that keeps the row and surfaces the error is the safe
+  direction, so the failure is left to propagate: the transaction rolls
+  back and the row stays exactly where it was, ready to retry once Wings
+  registers the route.
+* That also means once the route exists, an orphan on the plain `wings`
+  local adapter needs a second look. That path really does look for a
+  file on the node's own disk, so a 404 from it can be a genuine, honest
+  answer - the file is actually gone - and not just "the route does not
+  exist yet". With no 404 tolerance left, that case will fail Delete rather
+  than quietly succeed, and an operator will need Forget for it instead.
+  That is still the safe failure direction, and the route is not built yet,
+  so this is a note for whoever wires it up rather than a defect in what is
+  here now.
+* Once that route exists and behaves like the rest of the wire contract, the
+  same acknowledge-then-work pattern applies to it as to the existing
+  per-server delete: the borg deletion is acknowledged before it actually
+  runs, in a background goroutine, so the panel drops its row on a
+  successful acknowledgement while the archive deletion itself may still
+  fail afterwards, with the failure reaching only the node's own log. This
+  is not a new risk - the per-server delete has behaved this way since the
+  adapter shipped - but it is worth restating here, where the row being
+  dropped was the last record that the data ever existed at all.
+
 ## Limitations
 
-* Deleting a server does not delete its Borg repository. The panel's server
-  deletion path never touches backups for any adapter - upstream leaves S3
-  objects orphaned the same way - but a Borg repository holds a server's
-  entire backup history and will dominate storage growth on a busy panel
-  faster than a pile of orphaned S3 objects does. Cleanup is manual for now;
-  a reconciliation command is a follow-up.
+* Deleting a server does not delete its Borg repository outright, but the
+  data no longer disappears from the panel's view either - see **Orphaned
+  backups** above for what is now recorded and what an administrator can do
+  about it. Actually removing a borg or wings backup's stored data through
+  that page still needs the node-scoped delete route Wings does not have
+  yet, so cleanup for those two adapters stays effectively manual until it
+  ships; a Borg repository holds a server's entire backup history and will
+  still dominate storage growth on a busy panel faster than a pile of
+  orphaned S3 objects does.
 * No per-file or per-directory restore, and no browsing an archive's
   contents, even though Borg supports both. That is the "Richer user-facing
   backups" roadmap item.

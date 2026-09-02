@@ -36,9 +36,14 @@ side cannot ship alone.
   and `BORG_PASSPHRASE_SECRET` on demand, the same secret discipline as
   `APP_KEY`. Retention stays a panel concern rather than Borg's own `prune`,
   since `prune` has no way to see a locked backup and would eventually delete
-  one out from under the panel. See [`BACKUPS.md`](BACKUPS.md). **Needs Wings
-  work:** the node side does not exist yet, so this delivered piece is the
-  panel half plus the specification the node side will be built against.
+  one out from under the panel. A configurable mode picks between one
+  repository per server (the default, deduplicating) and one repository per
+  backup (self-contained, no deduplication). Deleting a server no longer
+  loses track of its backups either: they are recorded in an
+  `orphaned_backups` table before the cascade removes them, with an admin
+  page to delete or forget each one. See [`BACKUPS.md`](BACKUPS.md). **Needs
+  Wings work:** the node side does not exist yet, so this delivered piece is
+  the panel half plus the specification the node side will be built against.
 
 ## Planned
 
@@ -61,9 +66,11 @@ completion state. With a deduplicating backend there is much more worth showing:
 - Real disk usage — deduplicated and compressed size against logical size.
 - Progress and failure detail during creation and restore.
 
-Two follow-ups from the Borg work belong here too: a reconciliation command
-for repositories orphaned by deleted servers, and time-based retention as a
-panel scheduled command rather than anything driven by Borg's own `prune`.
+Three follow-ups from the Borg work belong here too: a reconciliation command
+that sweeps up repositories orphaned by deleted servers along with the empty
+repository skeletons and per-backup client caches that snapshot mode leaves
+behind on the node after a delete, and time-based retention as a panel
+scheduled command rather than anything driven by Borg's own `prune`.
 
 ### Minecraft world manager
 
