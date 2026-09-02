@@ -60,6 +60,12 @@ class SettingsController extends Controller
                 'passphraseSecretIsSet' => filled($this->config->get('backups.disks.borg.passphrase_secret')),
                 'sshPrivateKeyIsSet' => filled($this->config->get('backups.disks.borg.ssh.private_key')),
             ],
+            // Unreachable through the routes, which constrain the section to these three
+            // keys. It is here because a match without it throws UnhandledMatchError for
+            // any caller that reaches this method some other way, and because failing
+            // loudly is the right answer: a default returning an empty array would render
+            // a settings page with every control silently missing.
+            default => throw new \InvalidArgumentException("Unknown backup settings section [$section]."),
         });
     }
 

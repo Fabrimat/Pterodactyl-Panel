@@ -104,7 +104,7 @@ class BackupListTest extends HttpTestCase
     {
         $server = $this->createServerModel();
 
-        for ($i = 1; $i <= 26; $i++) {
+        for ($i = 1; $i <= 26; ++$i) {
             Backup::factory()->create([
                 'server_id' => $server->id,
                 'created_at' => now()->subMinutes($i),
@@ -122,7 +122,7 @@ class BackupListTest extends HttpTestCase
      */
     public function testOrphanedFilterSurvivesPagingToPageTwo(): void
     {
-        for ($i = 1; $i <= 26; $i++) {
+        for ($i = 1; $i <= 26; ++$i) {
             OrphanedBackup::query()->create($this->payload([
                 'backup_created_at' => now()->subMinutes($i),
             ]));
