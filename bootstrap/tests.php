@@ -7,6 +7,12 @@ use Symfony\Component\Console\Output\ConsoleOutput;
 
 require __DIR__ . '/../vendor/autoload.php';
 
+// public/index.php defines this for a real request, and the admin layout prints
+// the elapsed time from it in its footer. Tests never run that entry point, so
+// without this every test that renders an admin page dies on an undefined
+// constant rather than on anything to do with the page itself.
+defined('LARAVEL_START') || define('LARAVEL_START', microtime(true));
+
 $app = require __DIR__ . '/app.php';
 
 /** @var Pterodactyl\Console\Kernel $kernel */
