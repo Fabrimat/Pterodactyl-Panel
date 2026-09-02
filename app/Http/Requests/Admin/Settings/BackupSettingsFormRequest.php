@@ -2,7 +2,6 @@
 
 namespace Pterodactyl\Http\Requests\Admin\Settings;
 
-use Closure;
 use Pterodactyl\Models\Backup;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -95,9 +94,9 @@ class BackupSettingsFormRequest extends AdminFormRequest
      * prefix stripping the service does before checking a value against it,
      * so the two never drift apart.
      */
-    protected function compressionRule(): Closure
+    protected function compressionRule(): \Closure
     {
-        return function (string $attribute, mixed $value, Closure $fail) {
+        return function (string $attribute, mixed $value, \Closure $fail) {
             $value = (string) $value;
             $spec = str_starts_with($value, 'auto,') ? substr($value, 5) : $value;
 
