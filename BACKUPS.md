@@ -6,9 +6,11 @@ configuration, deriving each repository's passphrase, and shipping a `borg`
 configuration object to Wings inside the three daemon calls it already makes
 for a backup: create, restore and delete.
 
-**Wings does not implement any of this yet.** This document doubles as the
-specification the node side will be built against; the wire contract section
-below is authoritative for that work.
+**The node needs Borg support too.** Upstream Wings does not implement this
+adapter, so a node running it refuses a borg backup; the node half lives in
+this fork's Wings, and Borg itself has to be installed there. The wire contract
+section below is authoritative for both halves and is what each is built
+against.
 
 ## How it works
 
@@ -119,6 +121,63 @@ leaves its backups behind, unreachable from the new one.
 Changing `BORG_REPOSITORY` after backups already exist strands them in the old
 location - exactly like changing the bucket does for the `s3` adapter. Nothing
 migrates existing repositories automatically.
+
+### Preparing an ssh:// repository host
+
+The panel never touches a repository itself, so all of this is set up once on
+the machine that stores them. That machine can be the node: Borg does not care
+that the far end is the same host, and pointing at `127.0.0.1` keeps the
+traffic off the network entirely while still using the remote code path.
+
+Borg has to be installed at both ends, and the account the node connects as
+needs a login shell, since `borg serve` runs as its command.
+
+```bash
+useradd --system --create-home --home-dir /var/lib/borg --shell /bin/bash borg
+mkdir -p /var/lib/borg/pterodactyl
+chown -R borg:borg /var/lib/borg
+```
+
+Generate the key the panel will hold. It must have **no passphrase**: the node
+connects with `BatchMode=yes`, so there is no prompt at which one could be
+entered.
+
+```bash
+ssh-keygen -t ed25519 -N '' -f borg_ed25519
+```
+
+Authorize it with a forced command rather than as an ordinary login key:
+
+```
+command="borg serve --restrict-to-path /var/lib/borg/pterodactyl",restrict ssh-ed25519 AAAA...
+```
+
+That is worth the extra line. The panel hands this key to every node that runs
+a backup, which makes it the most widely copied secret in the system. The
+forced command means it can only ever start `borg serve`, and
+`--restrict-to-path` means it cannot open a repository outside that directory,
+so a leaked key does not become access to the whole host. Confirm the
+restriction rather than trusting the line: `borg info` against a path outside
+it should fail.
+
+`BORG_SSH_PRIVATE_KEY` holds the key's contents rather than a path to the file,
+in the same shape as `PASSPORT_PRIVATE_KEY`. `BORG_SSH_KNOWN_HOSTS` holds the
+repository host's public key, as `ssh-keyscan` prints it:
+
+```bash
+ssh-keyscan -t ed25519 127.0.0.1
+```
+
+Populating it is not optional in practice. The node keeps
+`StrictHostKeyChecking=yes` and never falls back to accepting an unknown host,
+so a missing or mismatched entry refuses the connection and arrives at the
+panel as a failed backup rather than as something that reads like a
+configuration mistake.
+
+A `./` after the host is relative to that account's home directory, so
+`ssh://borg@127.0.0.1/./pterodactyl` with the layout above resolves to
+`/var/lib/borg/pterodactyl`, and each server's repository is created
+underneath it.
 
 ## The Wings wire contract
 
