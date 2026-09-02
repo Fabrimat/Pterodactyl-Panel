@@ -103,6 +103,12 @@ The panel validates `BORG_COMPRESSION` and `BORG_ENCRYPTION` when it builds a
 backup request, so a typo in either one fails on the panel rather than
 failing silently on the node partway through a backup.
 
+`BORG_LOCK_WAIT` carries more weight than its position in that table suggests.
+Borg's own default is one second, so the field is what makes two operations on
+the same repository queue behind each other instead of the second one failing
+almost immediately. It is not a tuning knob to be removed for looking
+arbitrary.
+
 ## Remote versus local repositories
 
 A remote `ssh://` repository is the supported mode. A local path on the node
