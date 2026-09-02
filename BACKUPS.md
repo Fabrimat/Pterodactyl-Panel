@@ -37,6 +37,20 @@ every backup after it transfers and stores only what changed. There is no
 setting for this and nothing to configure - it is the reason to choose this
 adapter over a plain archive-and-upload one.
 
+Measured rather than assumed, on a real node over an `ssh://` repository: a
+second backup of an unchanged 58 MB server added **652 bytes** to its
+repository, against a logical archive size of 60,899,838 bytes. Two archives of
+identical content occupy the space of one.
+
+That figure is also the thing to check first if deduplication ever looks wrong,
+because there is one way to lose it completely while everything still appears
+to work. Borg chunks whatever stream it is given, so a node that handed it an
+already-compressed archive would be chunking compressed bytes, where a single
+changed byte near the start alters everything after it. Deduplication would
+collapse to nearly nothing and every backup would quietly transfer in full. A
+second backup of an unchanged server costing roughly as much as the first is
+that symptom.
+
 ## Passphrase custody
 
 Every repository is created `repokey-blake2` by default, and nothing about
@@ -64,6 +78,23 @@ This has consequences worth stating plainly:
   rotate the encryption key underneath it. After a node compromise, a new
   repository is the only real remedy - re-keying the existing one does not
   undo exposure of data already read with the old key.
+
+### Opening a repository without the panel
+
+Because the passphrase is derived rather than stored, recovering a repository
+needs no Pterodactyl code at all - only the secret, the server's UUID, and
+Borg. Deriving it by hand is the same HMAC the panel computes:
+
+```bash
+export BORG_PASSPHRASE=$(printf 'borg:v1:%s' "$SERVER_UUID"     | openssl dgst -sha256 -hmac "$BORG_PASSPHRASE_SECRET" -hex     | awk '{print $NF}')
+
+borg list "$BORG_REPOSITORY/$SERVER_UUID"
+```
+
+The server UUIDs are the repository directory names, so a repository base is
+self-describing: an operator holding the secret can enumerate and open every
+repository in it with nothing but Borg. This is the disaster recovery path, and
+it is worth testing before it is needed rather than after.
 
 ## Retention
 
