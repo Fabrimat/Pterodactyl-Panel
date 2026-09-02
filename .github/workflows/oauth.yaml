@@ -1,13 +1,13 @@
 name: OAuth
 
 on:
-  push:
+  pull_request:
     branches:
-      - "feature/per-user-2fa-and-mcp-server"
+      - "1.0-develop"
 
 jobs:
-  tests:
-    name: OAuth Tests
+  deployment:
+    name: OAuth deployment
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -31,24 +31,15 @@ jobs:
       # Install from the committed lock file so this workflow exercises the same
       # Passport release that a deployment would install.
       - run: composer install --no-interaction --no-progress --prefer-dist
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: composer-files
-          path: |
-            composer.json
-            composer.lock
+      # The deployment sequence OAUTH.md tells an operator to run, in that order,
+      # so the documented steps are exercised rather than only written down. The
+      # test suites themselves run in the Tests workflow; repeating them here
+      # would only make every pull request slower.
       - run: php artisan passport:keys --no-interaction
-      - run: vendor/bin/php-cs-fixer fix --dry-run --diff
-      - run: vendor/bin/phpunit --bootstrap vendor/autoload.php tests/Unit
-        env:
-          DB_HOST: UNIT_NO_DB
-      - run: vendor/bin/phpunit tests/Integration
+      - run: php artisan migrate --force --no-interaction
         env:
           DB_PORT: ${{ job.services.database.ports[3306] }}
           DB_USERNAME: root
-      # The remaining deployment steps an operator has to run, verified against the
-      # database the integration tests just migrated.
       - run: php artisan vendor:publish --tag=passport-migrations --no-interaction
       - run: php artisan migrate --force --no-interaction
         env:
