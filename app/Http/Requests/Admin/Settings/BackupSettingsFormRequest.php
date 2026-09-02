@@ -17,10 +17,32 @@ class BackupSettingsFormRequest extends AdminFormRequest
     {
         return [
             'backups:default' => ['required', Rule::in([Backup::ADAPTER_WINGS, Backup::ADAPTER_AWS_S3, Backup::ADAPTER_BORG])],
+            'backups:presigned_url_lifespan' => 'nullable|integer|min:1',
+            'backups:max_part_size' => 'nullable|integer|min:1',
+            'backups:prune_age' => 'nullable|integer|min:0',
+            'backups:throttles:limit' => 'nullable|integer|min:0',
+            'backups:throttles:period' => 'nullable|integer|min:0',
+            'backups:disks:s3:region' => 'nullable|string|max:191',
+            'backups:disks:s3:bucket' => 'nullable|string|max:191',
+            'backups:disks:s3:key' => 'nullable|string|max:191',
+            'backups:disks:s3:secret' => 'nullable|string',
+            'backups:disks:s3:endpoint' => 'nullable|string|max:191',
+            'backups:disks:s3:use_path_style_endpoint' => 'nullable|boolean',
+            'backups:disks:s3:use_accelerate_endpoint' => 'nullable|boolean',
+            'backups:disks:s3:storage_class' => 'nullable|string|max:191',
             'backups:disks:borg:repository' => 'nullable|string|max:191',
             'backups:disks:borg:passphrase_secret' => 'nullable|string',
             'backups:disks:borg:encryption' => ['required', Rule::in(BorgConfigurationService::VALID_ENCRYPTION_MODES)],
+            'backups:disks:borg:mode' => ['required', Rule::in(BorgConfigurationService::VALID_MODES)],
             'backups:disks:borg:compression' => ['required', $this->compressionRule()],
+            'backups:disks:borg:compression:algorithm' => 'nullable|string|max:20',
+            // Not "integer": the per-algorithm range differs, so a numeric rule here
+            // would be a second copy of the grammar that compressionRule() already
+            // enforces, kept in sync by hand. This rule only bounds the size of what
+            // gets composed; whatever survives it still has to satisfy the grammar,
+            // which is where a non-numeric or out-of-range level is caught.
+            'backups:disks:borg:compression:level' => 'nullable|string|max:5',
+            'backups:disks:borg:compression:auto' => 'nullable|boolean',
             'backups:disks:borg:ssh:private_key' => 'nullable|string',
             'backups:disks:borg:ssh:known_hosts' => 'nullable|string',
             'backups:disks:borg:lock_wait' => 'required|integer|between:1,86400',
@@ -28,7 +50,36 @@ class BackupSettingsFormRequest extends AdminFormRequest
             'backups:disks:borg:upload_ratelimit' => 'required|integer|min:0',
             'clear_passphrase_secret' => 'nullable|boolean',
             'clear_ssh_private_key' => 'nullable|boolean',
+            'clear_s3_secret' => 'nullable|boolean',
         ];
+    }
+
+    /**
+     * The three compression controls are request-only fields: they never map onto a
+     * settings key, and the composed string this builds out of them is validated by
+     * compressionRule() the same way a directly submitted value would be. Reassembling
+     * them has to run before rules() sees the request at all, which is why this cannot
+     * wait until normalize().
+     */
+    public function prepareForValidation(): void
+    {
+        if (!$this->has('backups:disks:borg:compression:algorithm')) {
+            return;
+        }
+
+        $algorithm = (string) $this->input('backups:disks:borg:compression:algorithm');
+        $level = $this->input('backups:disks:borg:compression:level');
+
+        $compression = $algorithm;
+        if (filled($level)) {
+            $compression .= ',' . $level;
+        }
+
+        if ($this->boolean('backups:disks:borg:compression:auto')) {
+            $compression = 'auto,' . $compression;
+        }
+
+        $this->merge(['backups:disks:borg:compression' => $compression]);
     }
 
     /**
@@ -54,10 +105,27 @@ class BackupSettingsFormRequest extends AdminFormRequest
     {
         return [
             'backups:default' => 'Backup Driver',
+            'backups:presigned_url_lifespan' => 'Presigned URL Lifespan',
+            'backups:max_part_size' => 'Max Part Size',
+            'backups:prune_age' => 'Prune Age',
+            'backups:throttles:limit' => 'Backup Throttle Limit',
+            'backups:throttles:period' => 'Backup Throttle Period',
+            'backups:disks:s3:region' => 'S3 Region',
+            'backups:disks:s3:bucket' => 'S3 Bucket',
+            'backups:disks:s3:key' => 'S3 Access Key ID',
+            'backups:disks:s3:secret' => 'S3 Secret Access Key',
+            'backups:disks:s3:endpoint' => 'S3 Endpoint',
+            'backups:disks:s3:use_path_style_endpoint' => 'S3 Path-Style Endpoint',
+            'backups:disks:s3:use_accelerate_endpoint' => 'S3 Accelerate Endpoint',
+            'backups:disks:s3:storage_class' => 'S3 Storage Class',
             'backups:disks:borg:repository' => 'Borg Repository',
             'backups:disks:borg:passphrase_secret' => 'Borg Passphrase Secret',
             'backups:disks:borg:encryption' => 'Borg Encryption Mode',
+            'backups:disks:borg:mode' => 'Borg Backup Mode',
             'backups:disks:borg:compression' => 'Borg Compression',
+            'backups:disks:borg:compression:algorithm' => 'Borg Compression Algorithm',
+            'backups:disks:borg:compression:level' => 'Borg Compression Level',
+            'backups:disks:borg:compression:auto' => 'Borg Compression Auto Prefix',
             'backups:disks:borg:ssh:private_key' => 'Borg SSH Private Key',
             'backups:disks:borg:ssh:known_hosts' => 'Borg SSH Known Hosts',
             'backups:disks:borg:lock_wait' => 'Borg Lock Wait',
@@ -65,24 +133,30 @@ class BackupSettingsFormRequest extends AdminFormRequest
             'backups:disks:borg:upload_ratelimit' => 'Borg Upload Ratelimit',
             'clear_passphrase_secret' => 'Clear Passphrase Secret',
             'clear_ssh_private_key' => 'Clear SSH Private Key',
+            'clear_s3_secret' => 'Clear S3 Secret',
         ];
     }
 
     /**
      * Only the fields that map directly onto a settings key are normalized this
-     * way. The two secrets are excluded because they are never set with a raw
+     * way. The three secrets are excluded because they are never set with a raw
      * value: an empty submission leaves the stored secret untouched, and a
      * non-empty one has to be encrypted first, both of which the controller
-     * handles separately. The two clear checkboxes are request-only fields,
-     * not settings keys.
+     * handles separately. The three clear checkboxes and the three compression
+     * controls are request-only fields, not settings keys.
      */
     public function normalize(?array $only = null): array
     {
         $keys = array_diff(array_keys($this->rules()), [
             'backups:disks:borg:passphrase_secret',
             'backups:disks:borg:ssh:private_key',
+            'backups:disks:borg:compression:algorithm',
+            'backups:disks:borg:compression:level',
+            'backups:disks:borg:compression:auto',
+            'backups:disks:s3:secret',
             'clear_passphrase_secret',
             'clear_ssh_private_key',
+            'clear_s3_secret',
         ]);
 
         return $this->only($only ?? $keys);

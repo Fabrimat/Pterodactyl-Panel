@@ -65,6 +65,7 @@ class Handler extends ExceptionHandler
         'password_confirmation',
         'backups:disks:borg:passphrase_secret',
         'backups:disks:borg:ssh:private_key',
+        'backups:disks:s3:secret',
     ];
 
     /**

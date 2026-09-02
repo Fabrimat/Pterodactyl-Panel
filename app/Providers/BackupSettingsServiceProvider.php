@@ -19,9 +19,23 @@ class BackupSettingsServiceProvider extends ServiceProvider
      */
     protected array $keys = [
         'backups:default',
+        'backups:presigned_url_lifespan',
+        'backups:max_part_size',
+        'backups:prune_age',
+        'backups:throttles:limit',
+        'backups:throttles:period',
+        'backups:disks:s3:region',
+        'backups:disks:s3:bucket',
+        'backups:disks:s3:key',
+        'backups:disks:s3:secret',
+        'backups:disks:s3:endpoint',
+        'backups:disks:s3:use_path_style_endpoint',
+        'backups:disks:s3:use_accelerate_endpoint',
+        'backups:disks:s3:storage_class',
         'backups:disks:borg:repository',
         'backups:disks:borg:passphrase_secret',
         'backups:disks:borg:encryption',
+        'backups:disks:borg:mode',
         'backups:disks:borg:compression',
         'backups:disks:borg:ssh:private_key',
         'backups:disks:borg:ssh:known_hosts',
@@ -35,6 +49,7 @@ class BackupSettingsServiceProvider extends ServiceProvider
      * configuration array.
      */
     protected static array $encrypted = [
+        'backups:disks:s3:secret',
         'backups:disks:borg:passphrase_secret',
         'backups:disks:borg:ssh:private_key',
     ];
@@ -47,9 +62,28 @@ class BackupSettingsServiceProvider extends ServiceProvider
      * a string without anything in this file's own logic looking wrong.
      */
     protected static array $integers = [
+        'backups:presigned_url_lifespan',
+        'backups:max_part_size',
+        'backups:prune_age',
+        'backups:throttles:limit',
+        'backups:throttles:period',
         'backups:disks:borg:lock_wait',
         'backups:disks:borg:checkpoint_interval',
         'backups:disks:borg:upload_ratelimit',
+    ];
+
+    /**
+     * Keys that config/backups.php casts to a boolean from their environment
+     * value. A database value always arrives as a string, and the S3 client
+     * these keys eventually configure expects a real boolean rather than a
+     * string it never asked for. filter_var() is used rather than leaving the
+     * switch above to catch it, since that switch only recognises the literal
+     * words "true" and "false" and would otherwise leave a stored "0" or "1"
+     * exactly as it arrived from the database.
+     */
+    protected static array $booleans = [
+        'backups:disks:s3:use_path_style_endpoint',
+        'backups:disks:s3:use_accelerate_endpoint',
     ];
 
     /**
@@ -96,6 +130,10 @@ class BackupSettingsServiceProvider extends ServiceProvider
 
             if (in_array($key, self::$integers)) {
                 $value = (int) $value;
+            }
+
+            if (in_array($key, self::$booleans)) {
+                $value = filter_var($value, FILTER_VALIDATE_BOOLEAN);
             }
 
             $config->set(str_replace(':', '.', $key), $value);

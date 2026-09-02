@@ -40,9 +40,38 @@ class BackupController extends Controller
                 Backup::ADAPTER_BORG => 'Borg',
             ],
             'encryptionModes' => BorgConfigurationService::VALID_ENCRYPTION_MODES,
+            'modes' => BorgConfigurationService::VALID_MODES,
+            'compression' => $this->decomposeCompression((string) $this->config->get('backups.disks.borg.compression')),
             'passphraseSecretIsSet' => filled($this->config->get('backups.disks.borg.passphrase_secret')),
             'sshPrivateKeyIsSet' => filled($this->config->get('backups.disks.borg.ssh.private_key')),
+            's3SecretIsSet' => filled($this->config->get('backups.disks.s3.secret')),
+            // Unlike the plain fields above, a boolean here has no textual "unset" value
+            // config() could ever expose: BackupSettingsServiceProvider always coerces it
+            // to a real true/false, whether that came from a stored override or from the
+            // environment default. Only the settings table itself still knows which one
+            // it was, which is why this reads from it directly instead of from config().
+            'usePathStyleEndpointIsSet' => $this->settings->get('settings::backups:disks:s3:use_path_style_endpoint', null) !== null,
+            'useAccelerateEndpointIsSet' => $this->settings->get('settings::backups:disks:s3:use_accelerate_endpoint', null) !== null,
         ]);
+    }
+
+    /**
+     * Splits the single string Borg's --compression flag expects back into the three
+     * controls the page exposes for it: an algorithm, an optional level and whether
+     * the "auto," prefix is present. Every value the grammar accepts is made up of
+     * exactly those three parts, so this is lossless - BackupSettingsFormRequest
+     * rebuilds the identical string out of whatever this returns.
+     */
+    protected function decomposeCompression(string $compression): array
+    {
+        $auto = str_starts_with($compression, 'auto,');
+        if ($auto) {
+            $compression = substr($compression, 5);
+        }
+
+        [$algorithm, $level] = array_pad(explode(',', $compression, 2), 2, '');
+
+        return ['algorithm' => $algorithm, 'level' => $level, 'auto' => $auto];
     }
 
     /**
@@ -72,6 +101,7 @@ class BackupController extends Controller
 
         $this->updateSecret($request, 'backups:disks:borg:passphrase_secret', 'clear_passphrase_secret');
         $this->updateSecret($request, 'backups:disks:borg:ssh:private_key', 'clear_ssh_private_key');
+        $this->updateSecret($request, 'backups:disks:s3:secret', 'clear_s3_secret');
 
         $this->kernel->call('queue:restart');
         $this->alert->success('Backup settings have been updated successfully and the queue worker was restarted to apply these changes.')->flash();
