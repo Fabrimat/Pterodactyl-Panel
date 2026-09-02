@@ -1,6 +1,7 @@
 includes:
     - ./vendor/larastan/larastan/extension.neon
     - ./vendor/phpstan/phpstan-webmozart-assert/extension.neon
+    - ./phpstan-baseline.neon
 
 rules:
     - PHPStan\Rules\DeadCode\UnreachableStatementRule
@@ -11,6 +12,11 @@ parameters:
     level: 4
     paths:
         - app
+    # The ignore comments and patterns below travel with upstream, and which of
+    # them a given phpstan release still needs varies. Reporting the ones that
+    # no longer match would mean editing upstream files to satisfy an analyser
+    # upstream does not run.
+    reportUnmatchedIgnoredErrors: false
     ignoreErrors:
         - '#Call to an undefined method Illuminate\\Database\\Eloquent\\Builder::allowed(\w+)\(\)#'
         - '#Call to an undefined method Prologue\\Alerts\\AlertsMessageBag::(success|warning|danger|info)\(\)#'
