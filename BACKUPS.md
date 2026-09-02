@@ -53,40 +53,82 @@ that symptom.
 
 ## Passphrase custody
 
-Every repository is created `repokey-blake2` by default, and nothing about
-its passphrase is stored in the panel's database. The passphrase is derived
-on demand:
+Every repository is created `repokey-blake2` by default, and the derived
+passphrase itself is never stored anywhere. It is recomputed on demand:
 
 ```
-HMAC-SHA256('borg:v1:' + server UUID, BORG_PASSPHRASE_SECRET)
+HMAC-SHA256('borg:v1:' + server UUID, the passphrase secret in force)
 ```
+
+The secret that derivation consumes can live in either of two places, and
+which one is in force decides what a recovery needs. Set only in the
+environment, it is `BORG_PASSPHRASE_SECRET`. Saved through the admin backup
+settings page, it is a row in the `settings` table encrypted with `APP_KEY`,
+and it then takes precedence over the environment variable, which stops having
+any effect until the stored value is cleared. See **Configuration** below.
 
 This has consequences worth stating plainly:
 
-* `BORG_PASSPHRASE_SECRET` must be backed up with exactly the care given to
-  `APP_KEY`. Lose it and every repository becomes unreadable ciphertext -
-  there is no amount of database access that recovers a derived passphrase.
-* Because nothing is stored in the database, a rebuilt panel can still open
-  every repository given the secret alone. The server UUIDs it needs are
-  recoverable from the repository directory names themselves.
+* The secret in force must be backed up with exactly the care given to
+  `APP_KEY`. Lose it and every repository becomes unreadable ciphertext: the
+  derived passphrase exists nowhere to be read back, and no amount of database
+  access reconstructs it without the secret.
+* Whether a rebuilt panel can open the existing repositories depends on which
+  of the two places the secret was in, so a backup plan has to cover the right
+  one. If it was only ever an environment variable, the environment alone is
+  enough. If it was saved through the settings page, what is needed is the
+  `settings` row **together with** the `APP_KEY` that encrypted it: either one
+  without the other recovers nothing, and an environment copy left over from
+  before the save is stale and derives the wrong passphrases.
+* The server UUIDs a recovery needs are recoverable from the repository
+  directory names themselves, in both cases.
 * The `borg:v1:` prefix is domain separation and a version marker, not
-  decoration. Rotating `BORG_PASSPHRASE_SECRET` is not supported in this
-  version. If that is ever built, the upgrade path is a `v2` prefix plus a
-  maintenance command that runs `borg key change-passphrase` over every
-  repository.
+  decoration. Rotation is not supported in this version, and the settings page
+  does not provide it: replacing the secret there abandons access to every
+  repository the old one unlocked rather than re-keying them. If real rotation
+  is ever built, the upgrade path is a `v2` prefix plus a maintenance command
+  that runs `borg key change-passphrase` over every repository.
 * `borg key change-passphrase` only re-wraps the repository key; it does not
   rotate the encryption key underneath it. After a node compromise, a new
   repository is the only real remedy - re-keying the existing one does not
   undo exposure of data already read with the old key.
 
+### What a replaced secret looks like afterwards
+
+Worth knowing before it happens, because almost none of it is visible from the
+panel. Once the secret no longer matches a repository, the node finds the
+repository present but unopenable and fails the backup. The failure report it
+sends back carries a success boolean and nothing else: there is no reason field
+on the completion report or on the websocket event, so the panel has no cause
+to store and none to show. The message explaining what went wrong exists in
+exactly one place, the wings log on the node.
+
+The operator's experience is therefore every backup for every affected server
+failing indefinitely, with no cause reachable from the panel at all, unless
+they have shell on the node and know to go read that log. This is why the
+confirmation on the settings page warns unconditionally and offers no
+reassuring branch: it is not a courtesy before a scary action, it is the only
+diagnostic for this failure that ever reaches a human, and it has to arrive
+before the fact because nothing arrives after it.
+
+Carrying a reason through would mean a new field on both the completion report
+and the event payload, in files upstream owns on both sides. That is a design
+conversation rather than a fix, and it is not built.
+
 ### Opening a repository without the panel
 
 Because the passphrase is derived rather than stored, recovering a repository
-needs no Pterodactyl code at all - only the secret, the server's UUID, and
-Borg. Deriving it by hand is the same HMAC the panel computes:
+needs no Pterodactyl code at all - only the secret in force, the server's
+UUID, and Borg. Deriving it by hand is the same HMAC the panel computes:
 
 ```bash
-export BORG_PASSPHRASE=$(printf 'borg:v1:%s' "$SERVER_UUID"     | openssl dgst -sha256 -hmac "$BORG_PASSPHRASE_SECRET" -hex     | awk '{print $NF}')
+# The secret in force, which is not necessarily what the environment says. If
+# it was saved through the admin settings page, take the settings row for
+# backups:disks:borg:passphrase_secret and decrypt it with the panel's
+# APP_KEY. Otherwise it is BORG_PASSPHRASE_SECRET from the environment.
+SECRET_IN_FORCE=...
+
+export BORG_PASSPHRASE=$(printf 'borg:v1:%s' "$SERVER_UUID"     | openssl dgst -sha256 -hmac "$SECRET_IN_FORCE" -hex     | awk '{print $NF}')
 
 borg list "$BORG_REPOSITORY/$SERVER_UUID"
 ```
@@ -113,6 +155,15 @@ authority that works for every adapter, Borg included, instead of a second one
 living inside Borg itself.
 
 ## Configuration
+
+Every value below can be set either in the environment or from the admin
+backup settings page. A value saved through the page becomes a row in the
+`settings` table and takes precedence over the environment variable of the
+same name, which stops having any effect until that row is cleared; clearing
+it returns the environment variable to force. The passphrase secret and the
+SSH private key are stored encrypted with `APP_KEY`. A panel that sets
+`APP_ENVIRONMENT_ONLY=true` ignores stored settings entirely and reads the
+environment only, so on such a panel the page is display without effect.
 
 | Variable | Default | Meaning |
 |---|---|---|
@@ -356,7 +407,10 @@ What this puts on Wings, stated as requirements rather than suggestions:
   backups" roadmap item.
 * No cross-server deduplication, by design - see the repository layout
   tradeoff above.
-* Rotating `BORG_PASSPHRASE_SECRET` is not supported.
+* Rotating the passphrase secret is not supported. The admin settings page can
+  replace it, but replacing it abandons access to every repository the old
+  secret unlocked rather than re-keying them, which is destruction and not
+  rotation. See **Passphrase custody**.
 * The first backup of a large server is a full one and can be slow.
   `BACKUP_PRUNE_AGE` defaults to 360 minutes, after which the panel marks a
   still-running backup as failed; raise it if a large server's first backup
