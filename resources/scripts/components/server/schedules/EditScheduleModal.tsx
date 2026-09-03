@@ -28,6 +28,7 @@ interface Values {
     minute: string;
     enabled: boolean;
     onlyWhenOnline: boolean;
+    healthchecksUuid: string;
 }
 
 const EditScheduleModal = ({ schedule }: Props) => {
@@ -57,6 +58,7 @@ const EditScheduleModal = ({ schedule }: Props) => {
                 dayOfMonth: values.dayOfMonth,
             },
             onlyWhenOnline: values.onlyWhenOnline,
+            healthchecksUuid: values.healthchecksUuid,
             isActive: values.enabled,
         })
             .then((schedule) => {
@@ -85,6 +87,7 @@ const EditScheduleModal = ({ schedule }: Props) => {
                     dayOfWeek: schedule?.cron.dayOfWeek || '*',
                     enabled: schedule?.isActive ?? true,
                     onlyWhenOnline: schedule?.onlyWhenOnline ?? true,
+                    healthchecksUuid: schedule?.healthchecksUuid || '',
                 } as Values
             }
         >
@@ -121,6 +124,15 @@ const EditScheduleModal = ({ schedule }: Props) => {
                                 <ScheduleCheatsheetCards />
                             </div>
                         )}
+                    </div>
+                    <div css={tw`mt-6`}>
+                        <Field
+                            name={'healthchecksUuid'}
+                            label={'Healthchecks.io UUID'}
+                            description={
+                                'Optional. The UUID of a healthchecks.io check to ping when this schedule finishes running. Leave blank to disable monitoring for this schedule.'
+                            }
+                        />
                     </div>
                     <div css={tw`mt-6 bg-neutral-700 border border-neutral-800 shadow-inner p-4 rounded`}>
                         <FormikSwitch

@@ -40,6 +40,16 @@ user can be required to use it, or exempted from it, independently of the global
 setting; the control lives on the admin user pages and on the application API.
 Left unset, an account follows the global setting exactly as before.
 
+Schedules can be monitored with healthchecks.io. Setting a check UUID on a
+schedule makes the Panel ping that check when a run finishes, hitting the bare
+check URL on success and its `/fail` endpoint on failure; leaving the UUID
+unset, or leaving `HEALTHCHECKS_URL` blank, keeps the Panel silent. For a
+backup task the success ping only means Wings accepted the backup request, not
+that the archive finished, since the archive is produced asynchronously on the
+node after the Panel's request returns. A task marked to continue on failure
+swallows a connection error to the node rather than ending the run, so a run
+that only hit those still pings success.
+
 ## Sponsors
 
 I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.

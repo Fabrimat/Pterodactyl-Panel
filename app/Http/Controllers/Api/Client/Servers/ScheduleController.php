@@ -63,6 +63,7 @@ class ScheduleController extends ClientApiController
             'cron_minute' => $request->input('minute'),
             'is_active' => (bool) $request->input('is_active'),
             'only_when_online' => (bool) $request->input('only_when_online'),
+            'healthchecks_uuid' => $request->input('healthchecks_uuid'),
             'next_run_at' => $this->getNextRunAt($request),
         ]);
 
@@ -112,6 +113,7 @@ class ScheduleController extends ClientApiController
             'cron_minute' => $request->input('minute'),
             'is_active' => $active,
             'only_when_online' => (bool) $request->input('only_when_online'),
+            'healthchecks_uuid' => $request->input('healthchecks_uuid'),
             'next_run_at' => $this->getNextRunAt($request),
         ];
 

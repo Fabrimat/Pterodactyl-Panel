@@ -23,6 +23,7 @@ class StoreScheduleRequest extends ViewScheduleRequest
             'hour' => $rules['cron_hour'],
             'day_of_month' => $rules['cron_day_of_month'],
             'day_of_week' => $rules['cron_day_of_week'],
+            'healthchecks_uuid' => $rules['healthchecks_uuid'],
         ];
     }
 }

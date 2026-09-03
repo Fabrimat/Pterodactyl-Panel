@@ -11,6 +11,7 @@ use Illuminate\Foundation\Bus\DispatchesJobs;
 use Pterodactyl\Services\Backups\InitiateBackupService;
 use Pterodactyl\Repositories\Wings\DaemonPowerRepository;
 use Pterodactyl\Repositories\Wings\DaemonCommandRepository;
+use Pterodactyl\Services\Schedules\HealthchecksPingService;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
 class RunTaskJob implements ShouldQueue
@@ -39,8 +40,7 @@ class RunTaskJob implements ShouldQueue
     ) {
         // Do not process a task that is not set to active, unless it's been manually triggered.
         if (!$this->task->schedule->is_active && !$this->manualRun) {
-            $this->markTaskNotQueued();
-            $this->markScheduleComplete();
+            $this->skipped();
 
             return;
         }
@@ -88,6 +88,18 @@ class RunTaskJob implements ShouldQueue
      */
     public function failed(?\Exception $exception = null)
     {
+        $this->skipped();
+
+        app(HealthchecksPingService::class)->ping($this->task->schedule, '/fail');
+    }
+
+    /**
+     * Marks the task as no longer queued and the schedule as complete without pinging
+     * healthchecks.io. Used for runs that did not actually happen, such as an inactive
+     * schedule being skipped, so that a false failure is not reported.
+     */
+    public function skipped(): void
+    {
         $this->markTaskNotQueued();
         $this->markScheduleComplete();
     }
@@ -105,6 +117,8 @@ class RunTaskJob implements ShouldQueue
 
         if (is_null($nextTask)) {
             $this->markScheduleComplete();
+
+            app(HealthchecksPingService::class)->ping($this->task->schedule);
 
             return;
         }

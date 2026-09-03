@@ -108,8 +108,38 @@ class UpdateServerScheduleTest extends ClientApiIntegrationTestCase
         $this->assertFalse($schedule->is_processing);
     }
 
+    /**
+     * Test that sending an empty string or null for "healthchecks_uuid" clears a
+     * previously stored value.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('emptyHealthchecksUuidDataProvider')]
+    public function testHealthchecksUuidCanBeCleared(?string $value)
+    {
+        [$user, $server] = $this->generateTestAccount();
+
+        /** @var Schedule $schedule */
+        $schedule = Schedule::factory()->create([
+            'server_id' => $server->id,
+            'healthchecks_uuid' => '9d3b7e2a-6c1f-4b2e-9c3d-1a2b3c4d5e6f',
+        ]);
+
+        $response = $this->actingAs($user)
+            ->postJson("/api/client/servers/{$server->uuid}/schedules/{$schedule->id}", array_merge(
+                $this->updateData,
+                ['healthchecks_uuid' => $value]
+            ));
+
+        $response->assertOk();
+        $this->assertNull($schedule->refresh()->healthchecks_uuid);
+    }
+
     public static function permissionsDataProvider(): array
     {
         return [[[]], [[Permission::ACTION_SCHEDULE_UPDATE]]];
+    }
+
+    public static function emptyHealthchecksUuidDataProvider(): array
+    {
+        return [[null], ['']];
     }
 }

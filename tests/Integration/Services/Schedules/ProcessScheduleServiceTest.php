@@ -7,10 +7,12 @@ use Carbon\CarbonImmutable;
 use Pterodactyl\Models\Task;
 use Pterodactyl\Models\Schedule;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Contracts\Bus\Dispatcher;
 use Pterodactyl\Jobs\Schedule\RunTaskJob;
 use Pterodactyl\Exceptions\DisplayException;
 use Pterodactyl\Tests\Integration\IntegrationTestCase;
+use Pterodactyl\Repositories\Wings\DaemonServerRepository;
 use Pterodactyl\Services\Schedules\ProcessScheduleService;
 
 class ProcessScheduleServiceTest extends IntegrationTestCase
@@ -145,6 +147,83 @@ class ProcessScheduleServiceTest extends IntegrationTestCase
         ]);
 
         $this->assertDatabaseHas('tasks', ['id' => $task->id, 'is_queued' => false]);
+    }
+
+    /**
+     * Test that the "/fail" healthchecks.io endpoint is pinged when a manual "dispatchNow"
+     * run encounters an error.
+     *
+     * @see https://github.com/pterodactyl/panel/issues/2550
+     */
+    public function testHealthchecksFailPingIsSentWhenDispatchNowEncountersError()
+    {
+        config(['healthchecks.url' => 'https://hc-ping.test']);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'hc-ping.test/*' => Http::response('OK'),
+        ]);
+
+        $this->swap(Dispatcher::class, $dispatcher = \Mockery::mock(Dispatcher::class));
+
+        $server = $this->createServerModel();
+        /** @var Schedule $schedule */
+        $schedule = Schedule::factory()->create([
+            'server_id' => $server->id,
+            'last_run_at' => null,
+            'healthchecks_uuid' => '9d3b7e2a-6c1f-4b2e-9c3d-1a2b3c4d5e6f',
+        ]);
+        /** @var Task $task */
+        $task = Task::factory()->create(['schedule_id' => $schedule->id, 'sequence_id' => 1]);
+
+        $dispatcher->expects('dispatchNow')->andThrows(new \Exception('Test thrown exception'));
+
+        try {
+            $this->getService()->handle($schedule, true);
+            $this->fail('Expected exception was not thrown by handle().');
+        } catch (\Exception $exception) {
+            $this->assertSame('Test thrown exception', $exception->getMessage());
+        }
+
+        Http::assertSent(function ($request) use ($schedule) {
+            return $request->url() === 'https://hc-ping.test/' . $schedule->healthchecks_uuid . '/fail';
+        });
+
+        // This path calls failed() and then skipped(), so the count is what proves
+        // only the first of the two reports an outcome.
+        Http::assertSentCount(1);
+    }
+
+    /**
+     * Test that a schedule using "only_when_online" does not ping healthchecks.io at all
+     * when the server is offline, since the task never actually ran.
+     */
+    public function testOnlyWhenOnlineOfflineServerDoesNotPingHealthchecks()
+    {
+        config(['healthchecks.url' => 'https://hc-ping.test']);
+
+        Bus::fake();
+        Http::preventStrayRequests();
+        Http::fake();
+
+        $server = $this->createServerModel();
+        /** @var Schedule $schedule */
+        $schedule = Schedule::factory()->create([
+            'server_id' => $server->id,
+            'only_when_online' => true,
+            'healthchecks_uuid' => '9d3b7e2a-6c1f-4b2e-9c3d-1a2b3c4d5e6f',
+        ]);
+        /** @var Task $task */
+        $task = Task::factory()->create(['schedule_id' => $schedule->id, 'sequence_id' => 1]);
+
+        $mock = \Mockery::mock(DaemonServerRepository::class);
+        $this->instance(DaemonServerRepository::class, $mock);
+        $mock->expects('setServer')->andReturnSelf();
+        $mock->expects('getDetails')->andReturn(['state' => 'offline']);
+
+        $this->getService()->handle($schedule);
+
+        Http::assertNothingSent();
     }
 
     public static function dispatchNowDataProvider(): array

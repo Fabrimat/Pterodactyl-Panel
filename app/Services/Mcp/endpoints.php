@@ -2613,6 +2613,10 @@ return [
             'day_of_week' => [
                 'type' => 'string',
             ],
+            'healthchecks_uuid' => [
+                'type' => 'string',
+                'description' => 'healthchecks.io check UUID to ping when the schedule finishes. Leave unset to disable.',
+            ],
         ],
         'required' => [
             'serverId',
@@ -2678,6 +2682,10 @@ return [
             ],
             'day_of_week' => [
                 'type' => 'string',
+            ],
+            'healthchecks_uuid' => [
+                'type' => 'string',
+                'description' => 'healthchecks.io check UUID to ping when the schedule finishes. Leave unset to disable.',
             ],
         ],
         'required' => [
