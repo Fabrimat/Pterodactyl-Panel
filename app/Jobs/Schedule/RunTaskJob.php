@@ -56,6 +56,15 @@ class RunTaskJob implements ShouldQueue
             return;
         }
 
+        // Ping the start of a run once, on the first task of the schedule. The job is
+        // already executing at this point, so any time_offset delay on this task has
+        // already elapsed.
+        if ($this->task->sequence_id === $this->task->schedule->tasks->min('sequence_id')) {
+            app(HealthchecksPingService::class)->ping($this->task->schedule, '/start');
+        }
+
+        $createdBackup = false;
+
         // Perform the provided task against the daemon.
         try {
             switch ($this->task->action) {
@@ -66,7 +75,10 @@ class RunTaskJob implements ShouldQueue
                     $commandRepository->setServer($server)->send($this->task->payload);
                     break;
                 case Task::ACTION_BACKUP:
-                    $backupService->setIgnoredFiles(explode(PHP_EOL, $this->task->payload))->handle($server, null, true);
+                    $backupService->setSchedule($this->task->schedule)
+                        ->setIgnoredFiles(explode(PHP_EOL, $this->task->payload))
+                        ->handle($server, null, true);
+                    $createdBackup = true;
                     break;
                 default:
                     throw new \InvalidArgumentException('Invalid task action provided: ' . $this->task->action);
@@ -80,7 +92,7 @@ class RunTaskJob implements ShouldQueue
         }
 
         $this->markTaskNotQueued();
-        $this->queueNextTask();
+        $this->queueNextTask($createdBackup);
     }
 
     /**
@@ -106,8 +118,12 @@ class RunTaskJob implements ShouldQueue
 
     /**
      * Get the next task in the schedule and queue it for running after the defined period of wait time.
+     *
+     * $createdBackup is true when this task created a backup row for the current run.
+     * In that case the run's outcome is reported by the backup's completion callback
+     * instead, not here, so no success ping is sent for it.
      */
-    private function queueNextTask()
+    private function queueNextTask(bool $createdBackup)
     {
         /** @var Task|null $nextTask */
         $nextTask = Task::query()->where('schedule_id', $this->task->schedule_id)
@@ -118,7 +134,9 @@ class RunTaskJob implements ShouldQueue
         if (is_null($nextTask)) {
             $this->markScheduleComplete();
 
-            app(HealthchecksPingService::class)->ping($this->task->schedule);
+            if (!$createdBackup) {
+                app(HealthchecksPingService::class)->ping($this->task->schedule);
+            }
 
             return;
         }

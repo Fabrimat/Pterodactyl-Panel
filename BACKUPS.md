@@ -515,7 +515,10 @@ What this puts on Wings, stated as requirements rather than suggestions:
   already does for every adapter. `checksum_type` is `borg-archive-id` and
   `checksum` is the archive ID, which is itself a content hash. The panel's
   validation on that endpoint requires both fields for a successful backup,
-  so omitting either one fails the completion with a 422.
+  so omitting either one fails the completion with a 422. When the backup was
+  triggered by a schedule, this is also where the panel's healthchecks.io
+  ping for that scheduled run originates, once this request has been
+  processed.
 * `size` is the archive's original, uncompressed logical size. Borg also
   reports compressed and deduplicated sizes; the panel only stores one number
   today, and reporting the others is a separate roadmap item, not something

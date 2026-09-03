@@ -7,6 +7,7 @@ use Carbon\CarbonImmutable;
 use Webmozart\Assert\Assert;
 use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\Server;
+use Pterodactyl\Models\Schedule;
 use Illuminate\Database\ConnectionInterface;
 use Pterodactyl\Extensions\Backups\BackupManager;
 use Pterodactyl\Repositories\Eloquent\BackupRepository;
@@ -19,6 +20,8 @@ class InitiateBackupService
     private array $ignoredFiles = [];
 
     private bool $isLocked = false;
+
+    private ?Schedule $schedule = null;
 
     /**
      * InitiateBackupService constructor.
@@ -39,6 +42,17 @@ class InitiateBackupService
     public function setIsLocked(bool $isLocked): self
     {
         $this->isLocked = $isLocked;
+
+        return $this;
+    }
+
+    /**
+     * Sets the schedule that triggered this backup, if any, so it can be recorded on
+     * the created row for the completion callback to report back to.
+     */
+    public function setSchedule(?Schedule $schedule): self
+    {
+        $this->schedule = $schedule;
 
         return $this;
     }
@@ -110,6 +124,7 @@ class InitiateBackupService
             /** @var Backup $backup */
             $backup = $this->repository->create([
                 'server_id' => $server->id,
+                'schedule_id' => $this->schedule?->id,
                 'uuid' => Uuid::uuid4()->toString(),
                 'name' => trim($name) ?: sprintf('Backup at %s', CarbonImmutable::now()->toDateTimeString()),
                 'ignored_files' => array_values($this->ignoredFiles),

@@ -16,6 +16,7 @@ use GuzzleHttp\Exception\BadResponseException;
 use Illuminate\Http\Client\ConnectionException;
 use Pterodactyl\Tests\Integration\IntegrationTestCase;
 use Pterodactyl\Repositories\Wings\DaemonPowerRepository;
+use Pterodactyl\Repositories\Wings\DaemonBackupRepository;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
 class RunTaskJobTest extends IntegrationTestCase
@@ -203,8 +204,9 @@ class RunTaskJobTest extends IntegrationTestCase
     }
 
     /**
-     * Test that the bare healthchecks.io check URL is pinged once the last task in a
-     * schedule completes successfully.
+     * Test that a run pings healthchecks.io twice: once to '/start' when the first
+     * task begins, and again to the bare check URL once the last task in the
+     * schedule completes successfully, in that order.
      */
     public function testHealthchecksIsPingedOnSuccessfulCompletion()
     {
@@ -239,13 +241,67 @@ class RunTaskJobTest extends IntegrationTestCase
 
         Bus::dispatchSync(new RunTaskJob($task));
 
-        Http::assertSent(function ($request) use ($schedule) {
-            return $request->url() === 'https://hc-ping.test/' . $schedule->healthchecks_uuid;
-        });
+        $recorded = Http::recorded();
 
         // A run that reported both a success and a failure, or reported the same
-        // outcome twice, would still satisfy assertSent on its own.
+        // outcome twice, would still satisfy assertSent on its own, so the count and
+        // the order of the two requests both have to be checked here.
+        $this->assertCount(2, $recorded);
+        $this->assertSame('https://hc-ping.test/' . $schedule->healthchecks_uuid . '/start', $recorded[0][0]->url());
+        $this->assertSame('https://hc-ping.test/' . $schedule->healthchecks_uuid, $recorded[1][0]->url());
+    }
+
+    /**
+     * Test that a schedule whose last task is a backup pings the start check but not
+     * the bare success URL when the run ends. InitiateBackupService::handle() returns
+     * as soon as Wings accepts the backup request; the archive itself is produced
+     * asynchronously on the node, so only the backup's own completion callback is
+     * allowed to report the run's outcome.
+     */
+    public function testHealthchecksStartPingsButNoSuccessPingWhenLastTaskIsABackup()
+    {
+        config(['healthchecks.url' => 'https://hc-ping.test']);
+
+        Http::preventStrayRequests();
+        Http::fake([
+            'hc-ping.test/*' => Http::response('OK'),
+        ]);
+
+        $server = $this->createServerModel(['backup_limit' => 1]);
+
+        /** @var Schedule $schedule */
+        $schedule = Schedule::factory()->create([
+            'server_id' => $server->id,
+            'is_processing' => true,
+            'last_run_at' => null,
+            'healthchecks_uuid' => '9d3b7e2a-6c1f-4b2e-9c3d-1a2b3c4d5e6f',
+        ]);
+        /** @var Task $task */
+        $task = Task::factory()->create([
+            'schedule_id' => $schedule->id,
+            'action' => Task::ACTION_BACKUP,
+            'payload' => '',
+            'sequence_id' => 1,
+            'is_queued' => true,
+        ]);
+
+        $mock = $this->mock(DaemonBackupRepository::class);
+        $mock->expects('setServer->setBackupAdapter->backup')->andReturn(new Response());
+
+        Bus::dispatchSync(new RunTaskJob($task));
+
+        Http::assertSent(function ($request) use ($schedule) {
+            return $request->url() === 'https://hc-ping.test/' . $schedule->healthchecks_uuid . '/start';
+        });
+
         Http::assertSentCount(1);
+
+        // Deferring the success ping is only safe because the backup row carries the
+        // schedule that is owed that ping. Without this the whole feature can be
+        // removed without a single test failing, and every scheduled backup then
+        // reports nothing at all: the job defers, and the completion endpoint finds
+        // no schedule to ping for.
+        $this->assertDatabaseHas('backups', ['server_id' => $server->id, 'schedule_id' => $schedule->id]);
     }
 
     /**

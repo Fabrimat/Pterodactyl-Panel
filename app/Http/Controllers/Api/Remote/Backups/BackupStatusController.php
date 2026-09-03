@@ -12,6 +12,7 @@ use Pterodactyl\Http\Controllers\Controller;
 use Pterodactyl\Extensions\Backups\BackupManager;
 use Pterodactyl\Extensions\Filesystem\S3Filesystem;
 use Pterodactyl\Exceptions\Http\HttpForbiddenException;
+use Pterodactyl\Services\Schedules\HealthchecksPingService;
 use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 use Pterodactyl\Http\Requests\Api\Remote\ReportBackupCompleteRequest;
 
@@ -52,12 +53,12 @@ class BackupStatusController extends Controller
             throw new BadRequestHttpException('Cannot update the status of a backup that is already marked as completed.');
         }
 
-        $action = $request->boolean('successful') ? 'server:backup.complete' : 'server:backup.fail';
+        $successful = $request->boolean('successful');
+
+        $action = $successful ? 'server:backup.complete' : 'server:backup.fail';
         $log = Activity::event($action)->subject($model, $model->server)->property('name', $model->name);
 
-        $log->transaction(function () use ($model, $request) {
-            $successful = $request->boolean('successful');
-
+        $log->transaction(function () use ($model, $request, $successful) {
             $model->fill([
                 'is_successful' => $successful,
                 // Change the lock state to unlocked if this was a failed backup so that it can be
@@ -76,6 +77,13 @@ class BackupStatusController extends Controller
                 $this->completeMultipartUpload($model, $adapter, $successful, $request->input('parts'));
             }
         });
+
+        // Pinged outside the transaction above so a slow healthchecks request never
+        // holds a database transaction open. A backup with no schedule, or a schedule
+        // with no healthchecks_uuid, pings nothing; both are handled by the service.
+        if ($model->schedule) {
+            app(HealthchecksPingService::class)->ping($model->schedule, $successful ? '' : '/fail');
+        }
 
         return new JsonResponse([], JsonResponse::HTTP_NO_CONTENT);
     }

@@ -41,14 +41,23 @@ setting; the control lives on the admin user pages and on the application API.
 Left unset, an account follows the global setting exactly as before.
 
 Schedules can be monitored with healthchecks.io. Setting a check UUID on a
-schedule makes the Panel ping that check when a run finishes, hitting the bare
-check URL on success and its `/fail` endpoint on failure; leaving the UUID
-unset, or leaving `HEALTHCHECKS_URL` blank, keeps the Panel silent. For a
-backup task the success ping only means Wings accepted the backup request, not
-that the archive finished, since the archive is produced asynchronously on the
-node after the Panel's request returns. A task marked to continue on failure
-swallows a connection error to the node rather than ending the run, so a run
-that only hit those still pings success.
+schedule makes the Panel ping that check, hitting the bare check URL on
+success and its `/fail` endpoint on failure; leaving the UUID unset, or
+leaving `HEALTHCHECKS_URL` blank, keeps the Panel silent. A run opens with a
+ping to `/start` on its first task, sent once the queued delay for that task
+has already elapsed. If the schedule's last task is a backup, the run does not
+report success when that task finishes; instead the ping is deferred to the
+backup actually completing on the node, so success there means the archive
+really finished, not just that Wings accepted the request. Because of that,
+the healthchecks grace period must be set longer than your slowest backup, or
+a run that is still archiving will be reported as down before it is actually
+late. A backup that never reports its completion, for whatever reason, still
+lands as down once that grace period passes. Put the backup task last in a
+schedule for this reason: a backup task followed by other tasks pings success
+as soon as the run ends, and the archive's real outcome only overrides that
+report later, which is a worse signal than waiting for it up front. A task
+marked to continue on failure swallows a connection error to the node rather
+than ending the run, so a run that only hit those still pings success.
 
 ## Sponsors
 

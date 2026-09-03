@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 /**
  * @property int $id
  * @property int $server_id
+ * @property int|null $schedule_id
  * @property string $uuid
  * @property bool $is_successful
  * @property bool $is_locked
@@ -26,6 +27,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property \Carbon\CarbonImmutable $updated_at
  * @property \Carbon\CarbonImmutable|null $deleted_at
  * @property Server $server
+ * @property \Pterodactyl\Models\Schedule|null $schedule
  * @property \Pterodactyl\Models\AuditLog[] $audits
  */
 #[Attributes\Identifiable('bkup')]
@@ -67,6 +69,7 @@ class Backup extends Model implements Identifiable
 
     public static array $validationRules = [
         'server_id' => 'bail|required|numeric|exists:servers,id',
+        'schedule_id' => 'nullable|integer',
         'uuid' => 'required|uuid',
         'is_successful' => 'boolean',
         'is_locked' => 'boolean',
@@ -84,5 +87,13 @@ class Backup extends Model implements Identifiable
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\Pterodactyl\Models\Schedule, $this>
+     */
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(Schedule::class);
     }
 }
