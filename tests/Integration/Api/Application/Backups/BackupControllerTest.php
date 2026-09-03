@@ -71,10 +71,15 @@ class BackupControllerTest extends ApplicationApiIntegrationTestCase
             'is_locked' => true,
         ]);
 
+        // Handler::render() rolls the connection all the way back to the start of the
+        // transaction whenever it renders an exception while one is open, which a
+        // wrapped integration test always has - so nothing created earlier in this test,
+        // the backup included, can be asserted against the database past this point. The
+        // response body is the only reliable way left to prove which exception fired.
         $this->delete('/api/application/backups/' . $backup->id)
-            ->assertStatus(Response::HTTP_BAD_REQUEST);
-
-        $this->assertDatabaseHas('backups', ['id' => $backup->id, 'deleted_at' => null]);
+            ->assertStatus(Response::HTTP_BAD_REQUEST)
+            ->assertJsonPath('errors.0.code', 'BackupLockedException')
+            ->assertJsonPath('errors.0.detail', 'Cannot delete a backup that is marked as locked.');
     }
 
     public function testUnlockedBackupIsDeletedThroughTheDeleteBackupService(): void

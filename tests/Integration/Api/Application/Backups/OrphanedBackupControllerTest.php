@@ -102,13 +102,27 @@ class OrphanedBackupControllerTest extends ApplicationApiIntegrationTestCase
         $this->assertDatabaseMissing('orphaned_backups', ['id' => $orphan->id]);
     }
 
-    public function testReadOnlyKeyCannotDeleteOrForgetAnOrphanedBackup(): void
+    // These are two tests rather than one because Handler::render() rolls the connection
+    // all the way back to the start of the transaction whenever it renders an exception
+    // while one is open, which a wrapped integration test always has. The orphan row
+    // created for the first refused request would already be gone by the time a second
+    // request in the same test tried to reuse it - route model binding would 404 on it
+    // instead of the request ever reaching the permission check being tested here.
+    public function testReadOnlyKeyCannotDeleteAnOrphanedBackup(): void
     {
         $this->createNewDefaultApiKey($this->getApiUser(), ['r_servers' => AdminAcl::READ]);
 
         $orphan = OrphanedBackup::query()->create($this->payload());
 
         $this->assertAccessDeniedJson($this->delete('/api/application/orphaned-backups/' . $orphan->id));
+    }
+
+    public function testReadOnlyKeyCannotForgetAnOrphanedBackup(): void
+    {
+        $this->createNewDefaultApiKey($this->getApiUser(), ['r_servers' => AdminAcl::READ]);
+
+        $orphan = OrphanedBackup::query()->create($this->payload());
+
         $this->assertAccessDeniedJson($this->postJson('/api/application/orphaned-backups/' . $orphan->id . '/forget'));
     }
 
