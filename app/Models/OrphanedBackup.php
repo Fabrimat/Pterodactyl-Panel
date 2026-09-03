@@ -27,6 +27,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class OrphanedBackup extends Model
 {
+    public const RESOURCE_NAME = 'orphaned_backup';
+
     protected $table = 'orphaned_backups';
 
     public $timestamps = false;

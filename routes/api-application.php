@@ -122,3 +122,35 @@ Route::group(['prefix' => '/nests'], function () {
         Route::get('/{egg:id}', [Application\Nests\EggController::class, 'view'])->name('api.application.nests.eggs.view');
     });
 });
+
+/*
+|--------------------------------------------------------------------------
+| Backup Controller Routes
+|--------------------------------------------------------------------------
+|
+| Endpoint: /api/application/backups
+|
+*/
+Route::group(['prefix' => '/backups'], function () {
+    Route::get('/', [Application\Backups\BackupController::class, 'index'])->name('api.application.backups');
+    Route::get('/{backup:id}', [Application\Backups\BackupController::class, 'view'])->name('api.application.backups.view');
+
+    Route::delete('/{backup:id}', [Application\Backups\BackupController::class, 'delete']);
+});
+
+/*
+|--------------------------------------------------------------------------
+| Orphaned Backup Controller Routes
+|--------------------------------------------------------------------------
+|
+| Endpoint: /api/application/orphaned-backups
+|
+*/
+Route::group(['prefix' => '/orphaned-backups'], function () {
+    Route::get('/', [Application\Backups\OrphanedBackupController::class, 'index'])->name('api.application.orphaned_backups');
+    Route::get('/{orphaned_backup:id}', [Application\Backups\OrphanedBackupController::class, 'view'])->name('api.application.orphaned_backups.view');
+
+    Route::post('/{orphaned_backup:id}/forget', [Application\Backups\OrphanedBackupController::class, 'forget']);
+
+    Route::delete('/{orphaned_backup:id}', [Application\Backups\OrphanedBackupController::class, 'delete']);
+});
