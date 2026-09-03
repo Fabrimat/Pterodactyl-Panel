@@ -1554,6 +1554,164 @@ return [
         ],
     ],
     [
+        'name' => 'panel_admin_backups_list',
+        'description' => 'List backups across every server on the panel. Unlike panel_client_servers_backups_list, which is scoped to one server, this is panel-wide. Supports pagination and filtering.',
+        'api' => 'application',
+        'method' => 'GET',
+        'path' => '/backups',
+        'query' => [
+            'page' => [
+                'type' => 'integer',
+                'description' => 'Page number, starting at 1.',
+                'minimum' => 1,
+                'maximum' => 9007199254740991,
+            ],
+            'per_page' => [
+                'type' => 'integer',
+                'description' => 'Results per page (panel default is 50).',
+                'minimum' => 1,
+                'maximum' => 100,
+            ],
+            'filter' => [
+                'type' => 'object',
+                'description' => 'Exact or partial match filters, sent as filter[key]=value. Allowed keys: uuid, server_id, disk, is_successful, is_locked.',
+                'additionalProperties' => [
+                    'type' => 'string',
+                ],
+            ],
+            'sort' => [
+                'type' => 'string',
+                'description' => 'Field to sort results by, prefix with "-" for descending. Allowed: id, uuid, created_at, bytes.',
+            ],
+            'include' => [
+                'type' => 'string',
+                'description' => 'Comma-separated related resources to embed in the response. Available: server.',
+            ],
+        ],
+    ],
+    [
+        'name' => 'panel_admin_backups_view',
+        'description' => 'View a single backup by numeric id, panel-wide rather than scoped to one server.',
+        'api' => 'application',
+        'method' => 'GET',
+        'path' => '/backups/{backupId}',
+        'path_params' => [
+            'backupId' => [
+                'type' => 'integer',
+                'description' => 'Numeric backup id.',
+                'maximum' => 9007199254740991,
+            ],
+        ],
+        'required' => [
+            'backupId',
+        ],
+    ],
+    [
+        'name' => 'panel_admin_backups_delete',
+        'description' => 'Permanently delete a backup by numeric id, panel-wide. Refused if the backup is locked. Destructive, cannot be undone.',
+        'api' => 'application',
+        'method' => 'DELETE',
+        'path' => '/backups/{backupId}',
+        'path_params' => [
+            'backupId' => [
+                'type' => 'integer',
+                'description' => 'Numeric backup id.',
+                'maximum' => 9007199254740991,
+            ],
+        ],
+        'required' => [
+            'backupId',
+        ],
+    ],
+    [
+        'name' => 'panel_admin_orphaned_backups_list',
+        'description' => "List orphaned backups: stored backup data that outlived the server it belonged to. Each row keeps the deleted server's name. Supports pagination and filtering.",
+        'api' => 'application',
+        'method' => 'GET',
+        'path' => '/orphaned-backups',
+        'query' => [
+            'page' => [
+                'type' => 'integer',
+                'description' => 'Page number, starting at 1.',
+                'minimum' => 1,
+                'maximum' => 9007199254740991,
+            ],
+            'per_page' => [
+                'type' => 'integer',
+                'description' => 'Results per page (panel default is 50).',
+                'minimum' => 1,
+                'maximum' => 100,
+            ],
+            'filter' => [
+                'type' => 'object',
+                'description' => 'Exact or partial match filters, sent as filter[key]=value. Allowed keys: backup_uuid, server_uuid, disk, node_id.',
+                'additionalProperties' => [
+                    'type' => 'string',
+                ],
+            ],
+            'sort' => [
+                'type' => 'string',
+                'description' => 'Field to sort results by, prefix with "-" for descending. Allowed: id, backup_created_at, bytes.',
+            ],
+            'include' => [
+                'type' => 'string',
+                'description' => 'Comma-separated related resources to embed in the response. Available: node.',
+            ],
+        ],
+    ],
+    [
+        'name' => 'panel_admin_orphaned_backups_view',
+        'description' => "View a single orphaned backup by numeric id. The row keeps the deleted server's name since the server itself no longer exists.",
+        'api' => 'application',
+        'method' => 'GET',
+        'path' => '/orphaned-backups/{orphanedBackupId}',
+        'path_params' => [
+            'orphanedBackupId' => [
+                'type' => 'integer',
+                'description' => 'Numeric orphaned backup id.',
+                'maximum' => 9007199254740991,
+            ],
+        ],
+        'required' => [
+            'orphanedBackupId',
+        ],
+    ],
+    [
+        'name' => 'panel_admin_orphaned_backups_delete',
+        'description' => "Permanently delete the stored data behind an orphaned backup. Removes the backup archive itself; use panel_admin_orphaned_backups_forget instead to drop only the panel's record and leave the data in place. Destructive, cannot be undone.",
+        'api' => 'application',
+        'method' => 'DELETE',
+        'path' => '/orphaned-backups/{orphanedBackupId}',
+        'path_params' => [
+            'orphanedBackupId' => [
+                'type' => 'integer',
+                'description' => 'Numeric orphaned backup id.',
+                'maximum' => 9007199254740991,
+            ],
+        ],
+        'required' => [
+            'orphanedBackupId',
+        ],
+    ],
+    [
+        'name' => 'panel_admin_orphaned_backups_forget',
+        'description' => "Remove the panel's record of an orphaned backup without touching the stored data, which is left in place and becomes untracked; use panel_admin_orphaned_backups_delete instead to remove the data too. Destructive: cannot be undone.",
+        'api' => 'application',
+        'method' => 'POST',
+        'path' => '/orphaned-backups/{orphanedBackupId}/forget',
+        'path_params' => [
+            'orphanedBackupId' => [
+                'type' => 'integer',
+                'description' => 'Numeric orphaned backup id.',
+                'maximum' => 9007199254740991,
+            ],
+        ],
+        'required' => [
+            'orphanedBackupId',
+        ],
+        'destructive' => true,
+    ],
+    [
         'name' => 'panel_client_servers_list',
         'description' => "List servers the API key's owner can access (owned or as a subuser).",
         'api' => 'client',

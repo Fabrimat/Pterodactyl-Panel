@@ -66,7 +66,7 @@ npx mcp-remote https://panel.example.com/mcp --header "Authorization: Bearer ptl
 
 Earlier revisions of this feature bundled a standalone stdio server that
 shipped its own copy of the endpoint table. That server has been removed:
-keeping the same 110-row mapping of REST endpoint to tool in both TypeScript
+keeping the same 117-row mapping of REST endpoint to tool in both TypeScript
 and PHP would only ever drift the two apart. `mcp-remote` is the standard
 bridge for exactly this situation and needs no code of the Panel's own to
 maintain.
@@ -83,11 +83,14 @@ same ground as the Client API: the servers the account can reach, console
 access, power control, backups, files, databases, schedules, subusers and the
 account's own settings.
 
-An account that is a root administrator additionally gets the 42 application
+An account that is a root administrator additionally gets the 49 application
 tools, named `panel_admin_*`, covering the Application API: users, nodes,
-locations, servers and nests/eggs panel-wide. This is checked on every
-request, the same as it is for the REST Application API itself, so demoting an
-administrator immediately removes their access to these tools.
+locations, servers, backups and nests/eggs panel-wide. This is checked on
+every request, the same as it is for the REST Application API itself, so
+demoting an administrator immediately removes their access to these tools.
+The admin backup and orphaned-backup tools are authorized under the servers
+ACL resource rather than a backups-specific one, since a backup is server
+data and the Application API has never split the two.
 
 An OAuth access token narrows this further by its granted scopes: `client:read`
 and `client:write` gate the client tools by whether they read or write,
