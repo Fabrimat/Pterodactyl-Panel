@@ -379,6 +379,41 @@ class BackupSettingsTest extends HttpTestCase
         $this->assertSame($encrypted, Setting::query()->where('key', 'settings::backups:disks:s3:secret')->first()->value);
     }
 
+    /**
+     * The theme hides the real input and draws the box a user actually sees with
+     * ::before on an adjacent <label>, so a checkbox nested inside its own label
+     * renders a box that never fills in and cannot be clicked. Nothing about that
+     * failure is visible server side, which is why this asserts on the markup
+     * shape the stylesheet requires rather than on any rendered value.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('checkboxDataProvider')]
+    public function testEveryCheckboxPairsItsInputWithAnAdjacentLabel(string $section, string $name): void
+    {
+        // The confirmation checkbox only renders once a passphrase secret is set.
+        config(['backups.disks.borg.passphrase_secret' => 'existing-secret']);
+
+        $html = $this->actingAsAdmin()->get('/admin/backups/settings/' . $section)->assertOk()->content();
+
+        preg_match('/<input[^>]*\sname="' . preg_quote($name, '/') . '"[^>]*>\s*<label\b[^>]*>/', $html, $pair);
+        $this->assertNotEmpty($pair, "The checkbox for $name is not immediately followed by its own <label>.");
+
+        preg_match('/\sid="([^"]+)"/', $pair[0], $id);
+        $this->assertNotEmpty($id, "The checkbox for $name has no id for its label to point at.");
+
+        $this->assertStringContainsString('for="' . $id[1] . '"', $pair[0], "The label beside the checkbox for $name does not point at it.");
+    }
+
+    public static function checkboxDataProvider(): array
+    {
+        return [
+            ['borg', 'backups:disks:borg:compression:auto'],
+            ['borg', 'clear_passphrase_secret'],
+            ['borg', 'confirm_passphrase_secret_change'],
+            ['borg', 'clear_ssh_private_key'],
+            ['s3', 'clear_s3_secret'],
+        ];
+    }
+
     private function actingAsAdmin(): self
     {
         return $this->actingAs(User::factory()->admin()->create());

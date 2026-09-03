@@ -102,10 +102,9 @@
                                             </select>
                                         </div>
                                     </div>
-                                    <div class="checkbox">
-                                        <label>
-                                            <input type="checkbox" id="compressionAuto" name="backups:disks:borg:compression:auto" value="1" @if(old('backups:disks:borg:compression:auto', $compression['auto'])) checked @endif> Only compress a chunk if doing so actually makes it smaller (auto)
-                                        </label>
+                                    <div class="checkbox checkbox-primary">
+                                        <input type="checkbox" id="compressionAuto" name="backups:disks:borg:compression:auto" value="1" @if(old('backups:disks:borg:compression:auto', $compression['auto'])) checked @endif />
+                                        <label for="compressionAuto">Only compress a chunk if doing so actually makes it smaller (auto)</label>
                                     </div>
                                     <p class="text-muted small">Overrides BORG_COMPRESSION. Passed to <code>borg --compression</code> verbatim: <code>none</code>, <code>lz4</code>, <code>zstd[,1-22]</code>, <code>zlib[,0-9]</code> or <code>lzma[,0-9]</code>, optionally prefixed with <code>auto,</code>.</p>
                                 </div>
@@ -138,18 +137,16 @@
                                 </div>
                             </div>
                             <div class="form-group col-md-12">
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="clear_passphrase_secret" value="1"> Remove the stored passphrase secret and fall back to the environment value.
-                                    </label>
+                                <div class="checkbox checkbox-primary">
+                                    <input type="checkbox" id="clearPassphraseSecret" name="clear_passphrase_secret" value="1" />
+                                    <label for="clearPassphraseSecret">Remove the stored passphrase secret and fall back to the environment value.</label>
                                 </div>
                             </div>
                             @if($passphraseSecretIsSet)
                                 <div class="form-group col-md-12">
-                                    <div class="checkbox">
-                                        <label>
-                                            <input type="checkbox" name="confirm_passphrase_secret_change" value="1"> I understand that replacing or clearing this secret is not recoverable and will make every existing backup unreadable.
-                                        </label>
+                                    <div class="checkbox checkbox-primary">
+                                        <input type="checkbox" id="confirmPassphraseSecretChange" name="confirm_passphrase_secret_change" value="1" />
+                                        <label for="confirmPassphraseSecretChange">I understand that replacing or clearing this secret is not recoverable and will make every existing backup unreadable.</label>
                                     </div>
                                 </div>
                             @endif
@@ -168,10 +165,9 @@
                                     <textarea class="form-control" rows="6" data-1p-ignore data-lpignore="true" data-bwignore="true" autocomplete="off" spellcheck="false" autocapitalize="off" name="backups:disks:borg:ssh:private_key" placeholder="{{ $sshPrivateKeyIsSet ? $secretPlaceholder : '' }}"></textarea>
                                     <p class="text-muted small">Only used when the repository is reached over SSH; ignored for a local path. The stored value is never displayed here: leave this field blank to leave it unchanged.</p>
                                 </div>
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="clear_ssh_private_key" value="1"> Remove the stored private key and fall back to the environment value.
-                                    </label>
+                                <div class="checkbox checkbox-primary">
+                                    <input type="checkbox" id="clearSshPrivateKey" name="clear_ssh_private_key" value="1" />
+                                    <label for="clearSshPrivateKey">Remove the stored private key and fall back to the environment value.</label>
                                 </div>
                             </div>
                             <div class="form-group col-md-6">

@@ -65,10 +65,9 @@
                                         Overrides AWS_SECRET_ACCESS_KEY. The stored value is never displayed here: leave this field blank to leave it unchanged.
                                     </p>
                                 </div>
-                                <div class="checkbox">
-                                    <label>
-                                        <input type="checkbox" name="clear_s3_secret" value="1"> Remove the stored secret access key and fall back to the environment value.
-                                    </label>
+                                <div class="checkbox checkbox-primary">
+                                    <input type="checkbox" id="clearS3Secret" name="clear_s3_secret" value="1" />
+                                    <label for="clearS3Secret">Remove the stored secret access key and fall back to the environment value.</label>
                                 </div>
                             </div>
                             <div class="form-group col-md-6">
