@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faArchive, faEllipsisH, faLock } from '@fortawesome/free-solid-svg-icons';
 import { format, formatDistanceToNow } from 'date-fns';
@@ -18,13 +18,51 @@ interface Props {
     className?: string;
 }
 
+// Same ring markup as the one in FileManagerStatus.tsx; progress is 0-100 and expected
+// to already be clamped by the caller.
+const ringSvgProps = {
+    cx: 16,
+    cy: 16,
+    r: 14,
+    strokeWidth: 3,
+    fill: 'none',
+    stroke: 'currentColor',
+};
+
+const ProgressRing = ({ progress }: { progress: number }) => (
+    <svg viewBox={'0 0 32 32'} css={tw`w-4 h-4`}>
+        <circle {...ringSvgProps} className={'opacity-25'} />
+        <circle
+            {...ringSvgProps}
+            stroke={'white'}
+            strokeDasharray={28 * Math.PI}
+            className={'rotate-[-90deg] origin-[50%_50%] transition-[stroke-dashoffset] duration-300'}
+            style={{ strokeDashoffset: ((100 - progress) / 100) * 28 * Math.PI }}
+        />
+    </svg>
+);
+
 export default ({ backup, className }: Props) => {
     const { mutate } = getServerBackups();
+    const [progress, setProgress] = useState<{ bytes_written: number; bytes_total: number } | null>(null);
 
-    useWebsocketEvent(`${SocketEvent.BACKUP_COMPLETED}:${backup.uuid}` as SocketEvent, (data) => {
+    useWebsocketEvent(SocketEvent.BACKUP_PROGRESS, (data) => {
         try {
             const parsed = JSON.parse(data);
+            if (parsed.uuid !== backup.uuid) return;
 
+            setProgress({ bytes_written: parsed.bytes_written || 0, bytes_total: parsed.bytes_total || 0 });
+        } catch (e) {
+            console.warn(e);
+        }
+    });
+
+    useWebsocketEvent(SocketEvent.BACKUP_COMPLETED, (data) => {
+        try {
+            const parsed = JSON.parse(data);
+            if (parsed.uuid !== backup.uuid) return;
+
+            setProgress(null);
             mutate(
                 (data) => ({
                     ...data,
@@ -33,7 +71,7 @@ export default ({ backup, className }: Props) => {
                             ? b
                             : {
                                   ...b,
-                                  isSuccessful: parsed.is_successful || true,
+                                  isSuccessful: !!parsed.is_successful,
                                   checksum: (parsed.checksum_type || '') + ':' + (parsed.checksum || ''),
                                   bytes: parsed.file_size || 0,
                                   completedAt: new Date(),
@@ -57,6 +95,8 @@ export default ({ backup, className }: Props) => {
                         ) : (
                             <FontAwesomeIcon icon={faArchive} css={tw`text-neutral-300`} />
                         )
+                    ) : progress !== null && progress.bytes_total > 0 ? (
+                        <ProgressRing progress={Math.min((progress.bytes_written / progress.bytes_total) * 100, 100)} />
                     ) : (
                         <Spinner size={'small'} />
                     )}
