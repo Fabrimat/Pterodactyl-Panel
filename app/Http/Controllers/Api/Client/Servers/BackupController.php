@@ -170,6 +170,12 @@ class BackupController extends ClientApiController
             throw new AuthorizationException();
         }
 
+        // The UI already hides download for an incomplete or failed backup; this
+        // guards direct API and MCP callers that have no such UI to rely on.
+        if (!$backup->is_successful || is_null($backup->completed_at)) {
+            throw new BadRequestHttpException('This backup cannot be downloaded at this time: not completed or failed.');
+        }
+
         if ($backup->disk !== Backup::ADAPTER_AWS_S3 && $backup->disk !== Backup::ADAPTER_WINGS && $backup->disk !== Backup::ADAPTER_BORG) {
             throw new BadRequestHttpException('The backup requested references an unknown disk driver type and cannot be downloaded.');
         }
