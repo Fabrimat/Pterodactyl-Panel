@@ -27,7 +27,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property \Carbon\CarbonImmutable $updated_at
  * @property \Carbon\CarbonImmutable|null $deleted_at
  * @property Server $server
- * @property \Pterodactyl\Models\Schedule|null $schedule
+ * @property Schedule|null $schedule
  * @property \Pterodactyl\Models\AuditLog[] $audits
  */
 #[Attributes\Identifiable('bkup')]
