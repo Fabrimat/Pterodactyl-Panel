@@ -134,7 +134,6 @@ class BackupListTest extends HttpTestCase
             ->assertSee('orphaned=1&amp;page=2', false);
     }
 
-
     /**
      * The size column is formatted by the controller rather than in the view, because
      * the obvious helper for it reaches for an extension this project does not require.
@@ -152,6 +151,7 @@ class BackupListTest extends HttpTestCase
             ->assertOk()
             ->assertSee('58.09 MiB');
     }
+
     private function actingAsAdmin(): self
     {
         return $this->actingAs(User::factory()->admin()->create());
