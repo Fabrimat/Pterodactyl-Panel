@@ -51,13 +51,15 @@ class DeleteOrphanedBackupService
             ? $this->borgConfigurationService->handle($backup->server_uuid, $backup->backup_uuid, $backup->borg_repository)
             : null;
 
-        // No tolerance for a 404 here, unlike the regular delete path: Wings has no
-        // route for this request yet, so a 404 today means "the route does not exist",
-        // never "the backup does not exist" - and once it does exist, a borg body can
-        // only ever get back a 400 or a 204, never a 404, so the code would still mean
-        // nothing useful on that branch either. Any failure - 404 included - keeps the
-        // row and surfaces the error instead: a row that outlives its data is a
-        // tidiness problem Forget can resolve by hand, while a dropped row whose data
+        // No tolerance for a 404 here, unlike the regular delete path: Wings registers
+        // a node-scoped route for this, but a borg body can only ever get back a 400
+        // or a 204 from it, never a 404, so a 404 is only reachable at all for the
+        // plain wings adapter, whose delete path really does look for a file on disk.
+        // This code does not yet distinguish that case from any other failure, so even
+        // a genuine "already gone" 404 for a wings row still keeps the row and surfaces
+        // the error rather than being treated as done. Any failure - 404 included -
+        // keeps the row and surfaces the error instead: a row that outlives its data is
+        // a tidiness problem Forget can resolve by hand, while a dropped row whose data
         // survives is unrecoverable.
         $this->connection->transaction(function () use ($backup, $node, $borg) {
             $this->daemonOrphanedBackupRepository->setNode($node)->delete($backup, $borg);

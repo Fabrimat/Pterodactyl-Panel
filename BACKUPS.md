@@ -122,6 +122,12 @@ every backup after it transfers and stores only what changed. There is no
 setting for this and nothing to configure - it is the reason to choose this
 adapter over a plain archive-and-upload one.
 
+That is about what crosses the wire and what the repository stores on disk,
+not about what an archive is. Every archive is still a complete backup of
+the server on its own: restoring or downloading any one of them yields the
+server's full contents outright, never a delta that has to be reassembled
+against earlier backups first.
+
 Measured rather than assumed, on a real node over an `ssh://` repository: a
 second backup of an unchanged 58 MB server added **652 bytes** to its
 repository, against a logical archive size of 60,899,838 bytes. Two archives of
@@ -383,7 +389,16 @@ underneath it.
 ## The Wings wire contract
 
 The `borg` object reaches Wings by two complementary channels, pushed for the
-operations the panel itself initiates and pulled for the one it does not:
+operations the panel itself initiates and pulled for the one it does not. A
+third channel belongs in this section too, alongside those two, even though
+it carries something else entirely and runs the other direction: backup
+progress, node to browser rather than panel to node, over the websocket
+connection the browser already holds for that server. Every event in that
+backup family, `backup completed` included, reaches the browser with any
+`:<backup-uuid>` suffix already stripped: Wings publishes each one
+internally as `<event>:<backup-uuid>`, but only the bare `<event>` name
+crosses the wire, so a consumer watching one particular backup has to match
+on the payload's `uuid` field rather than on the event name.
 
 * **Pushed.** The panel adds the object to the JSON body of the three
   requests it already makes to the node:
@@ -409,8 +424,27 @@ operations the panel itself initiates and pulled for the one it does not:
   backup. Persisting the object node-side instead was considered and
   rejected: that would put the passphrase at rest on the node, which is
   exactly what deriving it on demand is meant to avoid.
+* **Progress.** A backup emits `backup progress` on that websocket while it
+  runs, with the payload `{"uuid": ..., "bytes_written": ...,
+  "bytes_total": ...}`. The node throttles it to at most one message every
+  two seconds, plus a final one when the backup finishes, so a server with
+  a large number of small files never floods the panel with a message per
+  file. `bytes_total` is an estimate read from the server's own cached disk
+  usage rather than measured from the archive itself, so it can be `0`
+  when that figure is not yet known - meaning indeterminate rather than
+  complete - and `bytes_written` can end up larger than it; a consumer has
+  to clamp rather than trust the ratio outright. The events that carry
+  information about a backup - `backup completed` and this one - are
+  gated behind `backup.read`. `backup restore completed` is deliberately
+  not: it carries an empty payload at every call site, so it discloses
+  nothing about the backup itself, and it is what clears the panel's
+  restoring state for every viewer of the server, so gating it would leave
+  a subuser without `backup.read` stuck on the restoring screen after
+  someone else's restore. Progress itself measures the archiving stream
+  only: for the `s3` adapter that is the phase that builds the archive,
+  not the upload of it that follows.
 
-Both channels carry the identical object - one contract, not two:
+The first two channels carry the identical object - one contract, not two:
 
 ```json
 {
@@ -488,7 +522,16 @@ What this puts on Wings, stated as requirements rather than suggestions:
   Wings needs to solve now.
 * Download streams `borg export-tar` against the object it pulled, so what
   the user downloads is an ordinary tar file they can open with anything.
-  Restore, driven by the pushed object, materializes the archive into the
+  That tar is the whole archive, not a delta a client would need to
+  reassemble: every Borg archive is logically complete on its own,
+  deduplication lives inside the repository rather than in anything a
+  download has to undo, and pruning or deleting a sibling archive never
+  touches it, because Borg's chunks are reference counted. A node has to
+  preserve that property rather than short-circuiting it, and it has to
+  confirm with the repository that the archive actually exists before it
+  writes anything to the response: once the first byte goes out there is no
+  status code left to fail with, so that check has to run first.
+* Restore, driven by the pushed object, materializes the archive into the
   server's data directory. How it gets there is Wings' choice: writing the
   files straight out of Borg would skip the disk-quota check, the ownership
   fixing and the symlink sandboxing that every other restore on the node goes
@@ -560,31 +603,35 @@ by filtering to show orphans only, newest first, with two actions per row:
 
 Three things worth knowing before relying on Delete:
 
-* **Needs Wings work.** The node-scoped delete route above does not exist in
-  Wings yet, so today Delete for a borg or wings orphan fails outright:
-  there is no tolerance for a 404 response here, unlike the regular
-  per-server delete path. That is deliberate rather than an oversight. A row
-  that outlives its data is only a tidiness problem, one an operator can
-  resolve by hand with Forget once they know the data is really gone; a row
-  that is deleted while its data survives is unrecoverable, because that row
-  was the only remaining record that the data existed at all. Given that
-  choice, a failure that keeps the row and surfaces the error is the safe
-  direction, so the failure is left to propagate: the transaction rolls
-  back and the row stays exactly where it was, ready to retry once Wings
-  registers the route.
-* Once that route exists, the fix belongs on the panel side, as a branch on
-  the response it gets back, not as any change to what the node answers. A
-  404 from that route will then mean precisely "this node has no such
-  file" - a genuine, honest answer for the plain `wings` local adapter,
-  whose delete path really does look for a file on disk - so a 404 is the
-  one response safe to treat as already gone and drop the row for.
-  Anything else still keeps the row and surfaces the error. Having the node
-  answer 204 for a file it never found was considered instead and rejected:
-  that would have the node claim it removed something it never saw, and it
-  would blunt a signal the panel needs to read honestly.
-* Once that route exists and behaves like the rest of the wire contract, the
-  same acknowledge-then-work pattern applies to it as to the existing
-  per-server delete: the borg deletion is acknowledged before it actually
+* The node-scoped delete route now exists: Wings registers `DELETE
+  /api/backups/{backup-uuid}` outside any server group, and the panel
+  already sends it exactly as described above, so Delete for a borg or
+  wings orphan actually removes the stored data today. There is still no
+  tolerance for a 404 response here, unlike the regular per-server delete
+  path, and that is deliberate rather than an oversight: a row that
+  outlives its data is only a tidiness problem, one an operator can resolve
+  by hand with Forget once they know the data is really gone, while a row
+  that is deleted while its data survives is unrecoverable, because that
+  row was the only remaining record that the data existed at all. Given
+  that choice, a failure that keeps the row and surfaces the error is the
+  safe direction, so any failure - a 404 included - is left to propagate:
+  the transaction rolls back and the row stays exactly where it was, ready
+  to retry.
+* The fix that would change that belongs on the panel side, as a branch on
+  the response it gets back, not as any change to what the node answers,
+  and it has not been built yet. A 404 from that route means precisely
+  "this node has no such file" for the plain `wings` local adapter, whose
+  delete path really does look for a file on disk, so a 404 is the one
+  response that would be safe to treat as already gone and drop the row
+  for, once the panel is taught to read it that way; anything else should
+  still keep the row and surface the error. Having the node answer 204 for
+  a file it never found was considered instead and rejected: that would
+  have the node claim it removed something it never saw, and it would
+  blunt a signal the panel needs to read honestly. A borg body can never
+  get back a 404 from this route in the first place - only a 400 for a bad
+  configuration or a 204 - so this gap does not touch borg orphans at all.
+* The same acknowledge-then-work pattern the per-server delete already used
+  applies here too: a borg deletion is acknowledged before it actually
   runs, in a background goroutine, so the panel drops its row on a
   successful acknowledgement while the archive deletion itself may still
   fail afterwards, with the failure reaching only the node's own log. This
@@ -597,12 +644,13 @@ Three things worth knowing before relying on Delete:
 * Deleting a server does not delete its Borg repository outright, but the
   data no longer disappears from the panel's view either - see **Orphaned
   backups** above for what is now recorded and what an administrator can do
-  about it. Actually removing a borg or wings backup's stored data from the
-  unified backups list still needs the node-scoped delete route Wings does
-  not have yet, so cleanup for those two adapters stays effectively manual
-  until it ships; a Borg repository holds a server's entire backup history
-  and will still dominate storage growth on a busy panel faster than a pile
-  of orphaned S3 objects does.
+  about it. Removing a borg or wings backup's stored data from the unified
+  backups list now works end to end through the node-scoped delete route
+  described there, with one gap left: the plain `wings` adapter still has
+  no 404 tolerance on that path, so a row whose local file is already gone
+  has to be cleared with Forget by hand instead. A Borg repository holds a
+  server's entire backup history and will still dominate storage growth on
+  a busy panel faster than a pile of orphaned S3 objects does.
 * No per-file or per-directory restore, and no browsing an archive's
   contents, even though Borg supports both. That is the "Richer user-facing
   backups" roadmap item.

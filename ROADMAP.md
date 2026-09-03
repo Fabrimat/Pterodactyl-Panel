@@ -15,7 +15,7 @@ side cannot ship alone.
   2FA regardless of it, `false` exempts. Exposed in the admin user pages and the
   application API; deliberately not settable from the client API.
 - **MCP server.** The panel serves the Model Context Protocol natively at
-  `POST /mcp`, over a declarative endpoint table: 42 application (admin) tools
+  `POST /mcp`, over a declarative endpoint table: 49 application (admin) tools
   and 68 client (user) tools. Stateless Streamable HTTP, authenticated with
   either an API key or an OAuth bearer token, dispatching every tool call
   through the panel's own HTTP kernel so it gets the same middleware and
@@ -42,9 +42,11 @@ side cannot ship alone.
   loses track of its backups either: they are recorded in an
   `orphaned_backups` table before the cascade removes them and appear in the
   unified backups list at `/admin/backups`, where they can be deleted or
-  forgotten. See [`BACKUPS.md`](BACKUPS.md). **Needs Wings work:** the node
-  side does not exist yet, so this delivered piece is
-  the panel half plus the specification the node side will be built against.
+  forgotten. The same backups are reachable panel-wide over the application
+  API, and through the MCP tools built on it. See [`BACKUPS.md`](BACKUPS.md).
+  **Needs Wings work:** the node side is implemented in the companion Wings
+  fork on its own `feature/borg-backups` branch and is not merged there yet,
+  so the two halves have to land together.
 
 ## Planned
 
@@ -65,7 +67,8 @@ completion state. With a deduplicating backend there is much more worth showing:
 - Per-archive contents, so a user can see what is actually in a backup.
 - Single-file and single-directory restore, rather than all-or-nothing.
 - Real disk usage: deduplicated and compressed size against logical size.
-- Progress and failure detail during creation and restore.
+- Failure detail during creation, and progress during a restore. Progress
+  during creation itself is delivered.
 
 Three follow-ups from the Borg work belong here too: a reconciliation command
 that sweeps up repositories orphaned by deleted servers along with the
