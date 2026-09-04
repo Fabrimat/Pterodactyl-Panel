@@ -9,6 +9,7 @@ use Pterodactyl\Models\Server;
 use Illuminate\Http\JsonResponse;
 use Pterodactyl\Facades\Activity;
 use Pterodactyl\Services\Nodes\NodeJWTService;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Repositories\Wings\DaemonFileRepository;
 use Pterodactyl\Transformers\Api\Client\FileObjectTransformer;
 use Pterodactyl\Http\Controllers\Api\Client\ClientApiController;
@@ -32,6 +33,7 @@ class FileController extends ClientApiController
     public function __construct(
         private NodeJWTService $jwtService,
         private DaemonFileRepository $fileRepository,
+        private NodeFeatureService $nodeFeatureService,
     ) {
         parent::__construct();
     }
@@ -71,12 +73,19 @@ class FileController extends ClientApiController
 
     /**
      * Generates a one-time token with a link that the user can use to
-     * download a given file.
+     * download a given file or folder.
+     *
+     * A folder download is refused when the node's Wings does not advertise the
+     * folder-download feature.
      *
      * @throws \Throwable
      */
     public function download(GetFileContentsRequest $request, Server $server): array
     {
+        if ($request->boolean('directory')) {
+            $this->nodeFeatureService->assertSupports($server->node, NodeFeatureService::FEATURE_FOLDER_DOWNLOAD);
+        }
+
         $token = $this->jwtService
             ->setExpiresAt(CarbonImmutable::now()->addMinutes(15))
             ->setUser($request->user())

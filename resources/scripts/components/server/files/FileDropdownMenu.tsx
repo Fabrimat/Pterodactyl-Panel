@@ -98,7 +98,7 @@ const FileDropdownMenu = ({ file }: { file: FileObject }) => {
         setShowSpinner(true);
         clearFlashes('files');
 
-        getFileDownloadUrl(uuid, join(directory, file.name))
+        getFileDownloadUrl(uuid, join(directory, file.name), !file.isFile)
             .then((url) => {
                 // @ts-expect-error this is valid
                 window.location = url;
@@ -185,7 +185,7 @@ const FileDropdownMenu = ({ file }: { file: FileObject }) => {
                         <Row onClick={doArchive} icon={faFileArchive} title={'Archive'} />
                     </Can>
                 )}
-                {file.isFile && <Row onClick={doDownload} icon={faFileDownload} title={'Download'} />}
+                <Row onClick={doDownload} icon={faFileDownload} title={'Download'} />
                 <Can action={'file.delete'}>
                     <Row onClick={() => setShowConfirmation(true)} icon={faTrashAlt} title={'Delete'} $danger />
                 </Can>

@@ -9,12 +9,12 @@ use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
 /**
  * Reads the optional "features" list a node's Wings advertises off /api/system, and
- * gates fork-only backup operations (borg, orphaned backup delete) on it. A daemon
- * that predates this key sends nothing, and is therefore assumed to support nothing:
- * there is no way to distinguish "old daemon" from "daemon that genuinely has no
- * features" from the response alone, and both must be refused the same way.
+ * gates fork-only operations (borg, orphaned backup delete, folder download) on it. A
+ * daemon that predates this key sends nothing, and is therefore assumed to support
+ * nothing: there is no way to distinguish "old daemon" from "daemon that genuinely has
+ * no features" from the response alone, and both must be refused the same way.
  *
- * Deliberately uncached: a backup operation is a handful of requests per server per
+ * Deliberately uncached: a gated operation is a handful of requests per server per
  * day, and the request this check guards would incur the exact same daemon round trip
  * a moment later anyway. A cache would only buy staleness - most sharply right after an
  * operator upgrades a node and expects the very next request to succeed.
@@ -23,6 +23,7 @@ class NodeFeatureService
 {
     public const FEATURE_BORG = 'borg';
     public const FEATURE_ORPHANED_BACKUP_DELETE = 'orphaned-backup-delete';
+    public const FEATURE_FOLDER_DOWNLOAD = 'folder-download';
 
     public function __construct(private DaemonConfigurationRepository $repository)
     {
@@ -61,6 +62,6 @@ class NodeFeatureService
             return;
         }
 
-        throw new DisplayException("Node \"{$node->name}\" does not advertise support for the \"{$feature}\" feature. Upgrade Wings on that node, or change the default backup adapter for this Panel.");
+        throw new DisplayException("Node \"{$node->name}\" does not advertise support for the \"{$feature}\" feature. Upgrade Wings on that node to use it.");
     }
 }
