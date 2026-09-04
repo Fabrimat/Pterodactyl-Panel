@@ -10,6 +10,7 @@ use Pterodactyl\Models\Server;
 use Pterodactyl\Models\Location;
 use Pterodactyl\Models\Permission;
 use GuzzleHttp\Exception\TransferException;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Services\Backups\DeleteBackupService;
 use Pterodactyl\Tests\Integration\IntegrationTestCase;
 use Pterodactyl\Services\Backups\InitiateBackupService;
@@ -29,6 +30,16 @@ class BorgBackupTest extends IntegrationTestCase
             'backups.disks.borg.passphrase_secret' => 'test-secret',
             'backups.disks.borg.mode' => BorgConfigurationService::MODE_INCREMENTAL,
         ]);
+
+        // NodeFeatureService goes through DaemonConfigurationRepository, which builds
+        // its own real Guzzle client rather than going through getHttpClient() like the
+        // rest of this suite mocks around - so left unbound, every borg push call site
+        // below would attempt a real outbound connection to the factory-generated node.
+        // A permissive double keeps this suite exercising the borg branches themselves
+        // rather than the feature gate in front of them; the gate has its own coverage.
+        $nodeFeatures = \Mockery::mock(NodeFeatureService::class);
+        $nodeFeatures->shouldReceive('assertSupports')->andReturnNull();
+        $this->app->instance(NodeFeatureService::class, $nodeFeatures);
     }
 
     public function testInitiatingABackupSendsTheBorgConfigurationToTheDaemon(): void

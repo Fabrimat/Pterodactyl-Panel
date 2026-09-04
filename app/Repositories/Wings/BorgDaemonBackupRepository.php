@@ -2,11 +2,14 @@
 
 namespace Pterodactyl\Repositories\Wings;
 
+use Pterodactyl\Models\Node;
 use Webmozart\Assert\Assert;
 use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\Server;
 use Psr\Http\Message\ResponseInterface;
 use GuzzleHttp\Exception\TransferException;
+use Pterodactyl\Exceptions\DisplayException;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Services\Backups\BorgConfigurationService;
 use Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException;
 
@@ -63,6 +66,7 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
      * Sends a request to Wings to begin restoring a backup for a server.
      *
      * @throws DaemonConnectionException
+     * @throws DisplayException
      */
     public function restore(Backup $backup, ?string $url = null, bool $truncate = false): ResponseInterface
     {
@@ -71,6 +75,9 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
         }
 
         Assert::isInstanceOf($this->server, Server::class);
+        Assert::isInstanceOf($this->node, Node::class);
+
+        $this->nodeFeatures()->assertSupports($this->node, NodeFeatureService::FEATURE_BORG);
 
         try {
             return $this->getHttpClient()->post(
@@ -95,6 +102,7 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
      * order to remove the archive.
      *
      * @throws DaemonConnectionException
+     * @throws DisplayException
      */
     public function delete(Backup $backup): ResponseInterface
     {
@@ -103,6 +111,9 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
         }
 
         Assert::isInstanceOf($this->server, Server::class);
+        Assert::isInstanceOf($this->node, Node::class);
+
+        $this->nodeFeatures()->assertSupports($this->node, NodeFeatureService::FEATURE_BORG);
 
         try {
             return $this->getHttpClient()->delete(
@@ -125,5 +136,14 @@ class BorgDaemonBackupRepository extends DaemonBackupRepository
     protected function configuration(): BorgConfigurationService
     {
         return $this->app->make(BorgConfigurationService::class);
+    }
+
+    /**
+     * Resolves the service that checks whether a node's Wings advertises the feature a
+     * borg request requires, out of the container rather than newing it up directly.
+     */
+    protected function nodeFeatures(): NodeFeatureService
+    {
+        return $this->app->make(NodeFeatureService::class);
     }
 }

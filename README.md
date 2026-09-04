@@ -32,7 +32,10 @@ Four things are added on top of the upstream Panel, each documented on its own:
   external application can act on behalf of a real user instead of holding a
   shared static key.
 * [`BACKUPS.md`](BACKUPS.md) - the Panel's Borg backup adapter, deduplicating,
-  incremental and encrypted repositories driven by Wings on the node.
+  incremental and encrypted repositories driven by Wings on the node. Every
+  backup feature this adds is gated on what the node's daemon advertises, so
+  a node running upstream or outdated Wings refuses them rather than failing
+  in an obscure way.
 * [`ROADMAP.md`](ROADMAP.md) - the direction of the fork and what is not built yet.
 
 Two-factor authentication is also enforced per user here, not only panel-wide. A

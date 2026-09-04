@@ -10,6 +10,7 @@ use Pterodactyl\Models\Server;
 use Pterodactyl\Models\Schedule;
 use Illuminate\Database\ConnectionInterface;
 use Pterodactyl\Extensions\Backups\BackupManager;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Repositories\Eloquent\BackupRepository;
 use Pterodactyl\Repositories\Wings\DaemonBackupRepository;
 use Pterodactyl\Exceptions\Service\Backup\TooManyBackupsException;
@@ -32,6 +33,7 @@ class InitiateBackupService
         private DaemonBackupRepository $daemonBackupRepository,
         private DeleteBackupService $deleteBackupService,
         private BackupManager $backupManager,
+        private NodeFeatureService $nodeFeatureService,
     ) {
     }
 
@@ -86,9 +88,17 @@ class InitiateBackupService
      * @throws \Throwable
      * @throws TooManyBackupsException
      * @throws TooManyRequestsHttpException
+     * @throws \Pterodactyl\Exceptions\DisplayException
      */
     public function handle(Server $server, ?string $name = null, bool $override = false): Backup
     {
+        // Checked first, before the throttle check and - critically - before the backup
+        // rotation below: an incompatible node must never be allowed to delete the
+        // oldest backup only to then fail to create its replacement.
+        if ($this->backupManager->getDefaultAdapter() === Backup::ADAPTER_BORG) {
+            $this->nodeFeatureService->assertSupports($server->node, NodeFeatureService::FEATURE_BORG);
+        }
+
         $limit = config('backups.throttles.limit');
         $period = config('backups.throttles.period');
         if ($period > 0) {

@@ -46,7 +46,11 @@ side cannot ship alone.
   API, and through the MCP tools built on it. See [`BACKUPS.md`](BACKUPS.md).
   **Needs Wings work:** the node side is implemented in the companion Wings
   fork on its own `feature/borg-backups` branch and is not merged there yet,
-  so the two halves have to land together.
+  so the two halves have to land together. The Panel checks what a node's
+  daemon actually advertises before acting, and refuses borg create, restore
+  and delete, and orphaned-backup delete, on a node that does not advertise
+  the matching feature, naming the node, instead of failing opaquely against
+  a daemon that cannot serve the request.
 
 ## Planned
 

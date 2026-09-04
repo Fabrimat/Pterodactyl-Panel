@@ -7,6 +7,7 @@ use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\OrphanedBackup;
 use Illuminate\Database\ConnectionInterface;
 use Pterodactyl\Extensions\Backups\BackupManager;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Repositories\Wings\DaemonOrphanedBackupRepository;
 use Pterodactyl\Exceptions\Service\Backup\OrphanedBackupNodeMissingException;
 
@@ -17,6 +18,7 @@ class DeleteOrphanedBackupService
         private BackupManager $manager,
         private BorgConfigurationService $borgConfigurationService,
         private DaemonOrphanedBackupRepository $daemonOrphanedBackupRepository,
+        private NodeFeatureService $nodeFeatureService,
     ) {
     }
 
@@ -28,6 +30,8 @@ class DeleteOrphanedBackupService
      *
      * @throws \Throwable
      * @throws OrphanedBackupNodeMissingException
+     * @throws \Pterodactyl\Exceptions\Http\Connection\DaemonConnectionException
+     * @throws \Pterodactyl\Exceptions\DisplayException
      */
     public function handle(OrphanedBackup $backup): void
     {
@@ -47,6 +51,12 @@ class DeleteOrphanedBackupService
         }
 
         $node = Node::query()->findOrFail($backup->node_id);
+
+        // Both the borg and the plain wings disk go through the same node-scoped
+        // DELETE /api/backups/{uuid} route, and only the fork's Wings registers it at
+        // all, so both disks are gated on the same feature here.
+        $this->nodeFeatureService->assertSupports($node, NodeFeatureService::FEATURE_ORPHANED_BACKUP_DELETE);
+
         $borg = $backup->disk === Backup::ADAPTER_BORG
             ? $this->borgConfigurationService->handle($backup->server_uuid, $backup->backup_uuid, $backup->borg_repository)
             : null;

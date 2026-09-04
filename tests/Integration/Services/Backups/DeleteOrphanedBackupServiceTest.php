@@ -11,6 +11,7 @@ use Pterodactyl\Models\Location;
 use Pterodactyl\Models\OrphanedBackup;
 use GuzzleHttp\Exception\ClientException;
 use Pterodactyl\Extensions\Backups\BackupManager;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Extensions\Filesystem\S3Filesystem;
 use Pterodactyl\Tests\Integration\IntegrationTestCase;
 use Pterodactyl\Services\Backups\DeleteOrphanedBackupService;
@@ -28,6 +29,15 @@ class DeleteOrphanedBackupServiceTest extends IntegrationTestCase
             'backups.disks.borg.repository' => 'ssh://borg@backup.example.com:22/./pterodactyl',
             'backups.disks.borg.passphrase_secret' => 'test-secret',
         ]);
+
+        // NodeFeatureService builds its own real Guzzle client pointed at the node's
+        // factory-generated FQDN, unlike DaemonOrphanedBackupRepository which every
+        // test below mocks around directly. A permissive double keeps this suite
+        // exercising DeleteOrphanedBackupService's own branches; the gate itself is
+        // covered separately.
+        $nodeFeatures = \Mockery::mock(NodeFeatureService::class);
+        $nodeFeatures->shouldReceive('assertSupports')->andReturnNull();
+        $this->app->instance(NodeFeatureService::class, $nodeFeatures);
     }
 
     public function testS3BackupIsDeletedWithoutContactingAnyNode(): void

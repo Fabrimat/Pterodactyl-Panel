@@ -642,6 +642,39 @@ Three things worth knowing before relying on Delete:
   adapter shipped - but it is worth restating here, where the row being
   dropped was the last record that the data ever existed at all.
 
+## Deploy ordering
+
+Borg support is gated on what the node's daemon advertises. Wings reports a
+`features` array on `GET /api/system`, and this fork's Panel refuses borg
+create, restore and delete, and orphaned-backup delete, against a node whose
+daemon does not list the matching entry, naming the node in the error it
+raises rather than attempting a request the node cannot serve. A node running
+upstream Wings, or a build of this fork's Wings from before that array
+existed, sends no `features` key at all, which reads as advertising nothing
+and is refused on that basis exactly like a daemon that sent the array
+without `borg` in it.
+
+Upgrade Wings on a node before deploying a Panel that gates on the feature
+list, not the other way around: a daemon that does not advertise `borg` has
+borg backups refused outright, for every server on that node, until it is
+upgraded. The failure this ordering avoids is worth naming, because it does
+not announce itself as an error anywhere. `DeleteBackupService` treats a
+Wings 404 as "the backup is already gone" and removes the Panel's row for it
+- correct for a plain `wings` adapter backup whose file on disk really has
+vanished, wrong for a borg backup sent to a daemon that never understood the
+request as a borg delete at all. Deleting a borg backup against a Wings
+without borg support this way silently strands the archive on the node -
+under `snapshot` mode, that archive is an entire repository, not one entry
+inside a shared one - with no error surfaced anywhere and no row left in the
+Panel recording that it ever existed.
+
+One gap this leaves is documented rather than fixed here: transferring a
+server with borg backups onto a node whose daemon does not advertise `borg`
+strands those backups behind the same gate, since the receiving node refuses
+to create, restore or delete them until its Wings is upgraded. That is a
+policy question about server transfers between nodes, not a bug in the gate,
+and nothing in this fork resolves it.
+
 ## Limitations
 
 * Deleting a server does not delete its Borg repository outright, but the
