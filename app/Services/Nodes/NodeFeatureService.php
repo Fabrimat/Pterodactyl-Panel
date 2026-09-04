@@ -61,9 +61,6 @@ class NodeFeatureService
             return;
         }
 
-        throw new DisplayException(
-            "Node \"{$node->name}\" does not advertise support for the \"{$feature}\" feature. " .
-            'Upgrade Wings on that node, or change the default backup adapter for this Panel.'
-        );
+        throw new DisplayException("Node \"{$node->name}\" does not advertise support for the \"{$feature}\" feature. Upgrade Wings on that node, or change the default backup adapter for this Panel.");
     }
 }
