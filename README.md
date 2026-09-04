@@ -62,6 +62,106 @@ report later, which is a worse signal than waiting for it up front. A task
 marked to continue on failure swallows a connection error to the node rather
 than ending the run, so a run that only hit those still pings success.
 
+## Installing this fork
+
+This fork publishes no GitHub release, unlike upstream, so the step in the
+upstream installation guide that downloads `panel.tar.gz` from the releases
+page does not apply here: the code comes from git instead, and the frontend
+assets have to be built locally before the Panel will load without a 500 on a
+missing `manifest.json`. Everything else the upstream guide covers - the
+webserver, PHP, the database, redis, cron and the systemd unit - is
+unchanged; see the [Panel Documentation](https://pterodactyl.io/panel/1.0/getting_started.html)
+linked above for those parts. Building the assets needs Node >=22 and Yarn on
+whatever machine does the build; PHP stays at the `^8.2 || ^8.3` upstream
+already requires.
+
+### Fresh install
+
+Replace the upstream guide's download step with a clone of this fork, then
+build the assets it does not ship pre-built:
+
+```bash
+git clone --branch 1.0-develop https://github.com/Fabrimat/Pterodactyl-Panel.git /var/www/pterodactyl
+cd /var/www/pterodactyl
+cp .env.example .env
+composer install --no-dev --optimize-autoloader
+yarn install --frozen-lockfile
+yarn run build:production
+```
+
+Continue with the rest of the upstream guide from `php artisan key:generate`
+onward: environment setup, database migration, the first admin user, and the
+webserver, cron and queue worker configuration.
+
+### Upgrading an existing upstream Panel
+
+If the existing install is already a git checkout, add this fork as a second
+remote and switch the local branch onto it instead of downloading a new
+archive; the fresh install path above needs none of this, since it already
+hands off to the upstream guide:
+
+```bash
+cd /var/www/pterodactyl
+php artisan down
+git remote add fork https://github.com/Fabrimat/Pterodactyl-Panel.git
+git fetch fork
+git checkout -B 1.0-develop fork/1.0-develop
+composer install --no-dev --optimize-autoloader
+yarn install --frozen-lockfile
+yarn run build:production
+php artisan view:clear
+php artisan config:clear
+php artisan migrate --force --seed
+chown -R www-data:www-data /var/www/pterodactyl   # matches whatever user your webserver runs as
+php artisan queue:restart
+php artisan up
+```
+
+If the existing install is not a git checkout, clone the fork into a fresh
+directory instead and move `.env` and `storage/` over before running the same
+commands there.
+
+Upgrade Wings on every node before upgrading the Panel to a build that gates
+on its feature list. This Panel refuses borg create, restore and delete
+against a node whose Wings does not advertise borg support, so a Panel
+deployed ahead of its nodes has those operations refused rather than
+attempted against a daemon that cannot serve them - that refusal is the
+safeguard working, not data loss, and it clears once that node's Wings is
+upgraded. See `BACKUPS.md`, "Deploy ordering", for the one failure this
+ordering exists to avoid.
+
+### Docker compose
+
+The repo ships a `Dockerfile` that builds the assets in `node:22-alpine` and
+then installs the PHP dependencies in `php:8.3-fpm-alpine`, and a
+`docker-compose.example.yml` that otherwise pulls upstream's own image. Since
+this fork publishes no image of its own, build it from that `Dockerfile`
+instead of pulling one:
+
+```bash
+git clone --branch 1.0-develop https://github.com/Fabrimat/Pterodactyl-Panel.git
+cd Pterodactyl-Panel
+cp docker-compose.example.yml docker-compose.yml
+```
+
+In `docker-compose.yml`, replace the panel service's
+`image: ghcr.io/pterodactyl/panel:latest` line with `build: .`, then bring it
+up:
+
+```bash
+docker compose up -d
+```
+
+To upgrade later, pull the fork's changes and rebuild:
+`git pull && docker compose up -d --build panel`. The queue worker runs
+inside the same container under supervisord, so recreating the container also
+restarts it.
+
+Configuration specific to this fork - the `BORG_*` variables,
+`APP_BACKUP_DRIVER` and `HEALTHCHECKS_URL` - is documented in
+[`BACKUPS.md`](BACKUPS.md), `config/backups.php` and `config/healthchecks.php`,
+not repeated here.
+
 ## Sponsors
 
 I would like to extend my sincere thanks to the following sponsors for helping fund Pterodactyl's development.
