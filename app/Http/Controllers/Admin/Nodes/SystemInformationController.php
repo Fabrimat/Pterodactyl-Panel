@@ -35,6 +35,7 @@ class SystemInformationController extends Controller
                 'release' => $data['kernel_version'] ?? '--',
                 'cpus' => (int) ($data['cpu_count'] ?? 0),
             ],
+            'features' => $data['features'] ?? [],
         ]);
     }
 }

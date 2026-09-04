@@ -7,8 +7,10 @@ use Carbon\CarbonImmutable;
 use Webmozart\Assert\Assert;
 use Pterodactyl\Models\Backup;
 use Pterodactyl\Models\Server;
+use Pterodactyl\Models\Schedule;
 use Illuminate\Database\ConnectionInterface;
 use Pterodactyl\Extensions\Backups\BackupManager;
+use Pterodactyl\Services\Nodes\NodeFeatureService;
 use Pterodactyl\Repositories\Eloquent\BackupRepository;
 use Pterodactyl\Repositories\Wings\DaemonBackupRepository;
 use Pterodactyl\Exceptions\Service\Backup\TooManyBackupsException;
@@ -20,6 +22,8 @@ class InitiateBackupService
 
     private bool $isLocked = false;
 
+    private ?Schedule $schedule = null;
+
     /**
      * InitiateBackupService constructor.
      */
@@ -29,6 +33,7 @@ class InitiateBackupService
         private DaemonBackupRepository $daemonBackupRepository,
         private DeleteBackupService $deleteBackupService,
         private BackupManager $backupManager,
+        private NodeFeatureService $nodeFeatureService,
     ) {
     }
 
@@ -39,6 +44,17 @@ class InitiateBackupService
     public function setIsLocked(bool $isLocked): self
     {
         $this->isLocked = $isLocked;
+
+        return $this;
+    }
+
+    /**
+     * Sets the schedule that triggered this backup, if any, so it can be recorded on
+     * the created row for the completion callback to report back to.
+     */
+    public function setSchedule(?Schedule $schedule): self
+    {
+        $this->schedule = $schedule;
 
         return $this;
     }
@@ -72,9 +88,17 @@ class InitiateBackupService
      * @throws \Throwable
      * @throws TooManyBackupsException
      * @throws TooManyRequestsHttpException
+     * @throws \Pterodactyl\Exceptions\DisplayException
      */
     public function handle(Server $server, ?string $name = null, bool $override = false): Backup
     {
+        // Checked first, before the throttle check and - critically - before the backup
+        // rotation below: an incompatible node must never be allowed to delete the
+        // oldest backup only to then fail to create its replacement.
+        if ($this->backupManager->getDefaultAdapter() === Backup::ADAPTER_BORG) {
+            $this->nodeFeatureService->assertSupports($server->node, NodeFeatureService::FEATURE_BORG);
+        }
+
         $limit = config('backups.throttles.limit');
         $period = config('backups.throttles.period');
         if ($period > 0) {
@@ -110,6 +134,7 @@ class InitiateBackupService
             /** @var Backup $backup */
             $backup = $this->repository->create([
                 'server_id' => $server->id,
+                'schedule_id' => $this->schedule?->id,
                 'uuid' => Uuid::uuid4()->toString(),
                 'name' => trim($name) ?: sprintf('Backup at %s', CarbonImmutable::now()->toDateTimeString()),
                 'ignored_files' => array_values($this->ignoredFiles),

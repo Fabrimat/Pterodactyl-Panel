@@ -77,6 +77,28 @@ class CreateServerScheduleTest extends ClientApiIntegrationTestCase
     }
 
     /**
+     * Test that a non-uuid value for "healthchecks_uuid" is rejected.
+     */
+    public function testHealthchecksUuidMustBeAValidUuid()
+    {
+        [$user, $server] = $this->generateTestAccount();
+
+        $this->actingAs($user)
+            ->postJson("/api/client/servers/$server->uuid/schedules", [
+                'name' => 'Testing',
+                'minute' => '*',
+                'hour' => '*',
+                'day_of_month' => '*',
+                'month' => '*',
+                'day_of_week' => '*',
+                'healthchecks_uuid' => 'not-a-uuid',
+            ])
+            ->assertStatus(Response::HTTP_UNPROCESSABLE_ENTITY)
+            ->assertJsonPath('errors.0.meta.rule', 'uuid')
+            ->assertJsonPath('errors.0.meta.source_field', 'healthchecks_uuid');
+    }
+
+    /**
      * Test that a subuser without required permissions cannot create a schedule.
      */
     public function testSubuserCannotCreateScheduleWithoutPermissions()

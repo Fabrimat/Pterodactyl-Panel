@@ -226,3 +226,22 @@ Route::group(['prefix' => 'nests'], function () {
     Route::delete('/egg/{egg:id}', [Admin\Nests\EggController::class, 'destroy']);
     Route::delete('/egg/{egg:id}/variables/{variable:id}', [Admin\Nests\EggVariableController::class, 'destroy']);
 });
+
+/*
+|--------------------------------------------------------------------------
+| Backup Controller Routes
+|--------------------------------------------------------------------------
+|
+| Endpoint: /admin/backups
+|
+*/
+Route::group(['prefix' => 'backups'], function () {
+    Route::get('/', [Admin\Backups\BackupController::class, 'index'])->name('admin.backups');
+    Route::get('/settings/{section}', [Admin\Backups\SettingsController::class, 'index'])->name('admin.backups.settings')->whereIn('section', ['general', 's3', 'borg']);
+
+    Route::post('/orphaned/{orphaned_backup:id}/forget', [Admin\Backups\OrphanedBackupController::class, 'forget'])->name('admin.backups.orphaned.forget');
+
+    Route::patch('/settings/{section}', [Admin\Backups\SettingsController::class, 'update'])->whereIn('section', ['general', 's3', 'borg']);
+
+    Route::delete('/orphaned/{orphaned_backup:id}', [Admin\Backups\OrphanedBackupController::class, 'delete'])->name('admin.backups.orphaned.delete');
+});

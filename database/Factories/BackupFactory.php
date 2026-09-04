@@ -25,6 +25,7 @@ class BackupFactory extends Factory
             'uuid' => Uuid::uuid4()->toString(),
             'name' => $this->faker->sentence,
             'disk' => Backup::ADAPTER_WINGS,
+            'ignored_files' => [],
             'is_successful' => true,
             'created_at' => CarbonImmutable::now(),
             'completed_at' => CarbonImmutable::now(),

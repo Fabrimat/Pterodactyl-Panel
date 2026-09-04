@@ -35,6 +35,7 @@ class ScheduleTransformer extends BaseClientTransformer
             'is_active' => $model->is_active,
             'is_processing' => $model->is_processing,
             'only_when_online' => $model->only_when_online,
+            'healthchecks_uuid' => $model->healthchecks_uuid,
             'last_run_at' => $model->last_run_at?->toAtomString(),
             'next_run_at' => $model->next_run_at?->toAtomString(),
             'created_at' => $model->created_at->toAtomString(),

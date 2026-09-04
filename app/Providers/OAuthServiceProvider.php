@@ -45,7 +45,7 @@ class OAuthServiceProvider extends ServiceProvider
         // Passport registers its own routes, so the only opportunity to add middleware to
         // them is once every route in the application has been loaded.
         $this->app->booted(function () {
-            foreach (Route::getRoutes() as $route) {
+            foreach (Route::getRoutes()->getRoutes() as $route) {
                 if (str_starts_with((string) $route->getName(), 'passport.authorizations.')) {
                     $route->middleware($this->authorizationMiddleware);
                 }

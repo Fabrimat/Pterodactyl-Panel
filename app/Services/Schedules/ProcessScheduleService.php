@@ -50,7 +50,7 @@ class ProcessScheduleService
                 $state = $details['state'] ?? 'offline';
                 // If the server is stopping or offline just do nothing with this task.
                 if (in_array($state, ['offline', 'stopping'])) {
-                    $job->failed();
+                    $job->skipped();
 
                     return;
                 }
@@ -61,7 +61,7 @@ class ProcessScheduleService
                     // can just quietly mark the task as completed without actually running anything.
                     $job->failed($exception);
                 }
-                $job->failed();
+                $job->skipped();
 
                 return;
             }

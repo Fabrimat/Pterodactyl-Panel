@@ -15,7 +15,7 @@ side cannot ship alone.
   2FA regardless of it, `false` exempts. Exposed in the admin user pages and the
   application API; deliberately not settable from the client API.
 - **MCP server.** The panel serves the Model Context Protocol natively at
-  `POST /mcp`, over a declarative endpoint table: 42 application (admin) tools
+  `POST /mcp`, over a declarative endpoint table: 49 application (admin) tools
   and 68 client (user) tools. Stateless Streamable HTTP, authenticated with
   either an API key or an OAuth bearer token, dispatching every tool call
   through the panel's own HTTP kernel so it gets the same middleware and
@@ -26,6 +26,31 @@ side cannot ship alone.
   `client:read`, `client:write`, `admin:read`, `admin:write`. The panel is also
   an OAuth resource server for `/mcp`, publishing RFC 9728 protected-resource
   metadata so a client can discover the authorization server on its own.
+- **Borg-compatible backup system.** A third backup adapter beside
+  `Backup::ADAPTER_WINGS` and `Backup::ADAPTER_AWS_S3`, registered in
+  `config/backups.php`. One Borg repository per server rather than per node or
+  panel-wide: Borg has no per-archive authorization inside a repository, so
+  sharing one across servers would let any server's key read every other
+  server's data, and per-server also caps the blast radius of corruption. The
+  repository passphrase is never stored - it is derived from the server UUID
+  and `BORG_PASSPHRASE_SECRET` on demand, the same secret discipline as
+  `APP_KEY`. Retention stays a panel concern rather than Borg's own `prune`,
+  since `prune` has no way to see a locked backup and would eventually delete
+  one out from under the panel. A configurable mode picks between one
+  repository per server (the default, deduplicating) and one repository per
+  backup (self-contained, no deduplication). Deleting a server no longer
+  loses track of its backups either: they are recorded in an
+  `orphaned_backups` table before the cascade removes them and appear in the
+  unified backups list at `/admin/backups`, where they can be deleted or
+  forgotten. The same backups are reachable panel-wide over the application
+  API, and through the MCP tools built on it. See [`BACKUPS.md`](BACKUPS.md).
+  **Needs Wings work:** the node side is implemented in the companion Wings
+  fork on its own `feature/borg-backups` branch and is not merged there yet,
+  so the two halves have to land together. The Panel checks what a node's
+  daemon actually advertises before acting, and refuses borg create, restore
+  and delete, and orphaned-backup delete, on a node that does not advertise
+  the matching feature, naming the node, instead of failing opaquely against
+  a daemon that cannot serve the request.
 
 ## Planned
 
@@ -38,25 +63,6 @@ vulnerability), it prevents understanding which MCP client or external
 application performed an action. Attribute OAuth-driven activity to the OAuth
 client so the activity log can distinguish an MCP client from a browser session.
 
-### Borg-compatible backup system
-
-Full Borg support, not a partial or best-effort integration — deduplicating,
-incremental, encrypted repositories as a first-class backup target.
-
-Lands as a third backup adapter beside the existing `Backup::ADAPTER_WINGS` and
-`Backup::ADAPTER_AWS_S3`, registered in `config/backups.php`. **Needs Wings work:**
-Borg runs on the node, against the server's data directory.
-
-Open questions worth settling before building:
-
-- Repository layout: one Borg repository per server, per node, or per panel, and
-  what that implies for deduplication ratio versus blast radius on corruption.
-- Passphrase and key custody — where the repokey lives, who can read it, and what
-  happens on node compromise.
-- Retention and pruning policy, and whether it is per-server or panel-wide.
-- Restore semantics: Borg's archive model does not map onto the current
-  restore-the-whole-backup flow, which the next item depends on.
-
 ### Richer user-facing backups
 
 The client API currently exposes little more than a backup's name, size and
@@ -64,8 +70,15 @@ completion state. With a deduplicating backend there is much more worth showing:
 
 - Per-archive contents, so a user can see what is actually in a backup.
 - Single-file and single-directory restore, rather than all-or-nothing.
-- Real disk usage — deduplicated and compressed size against logical size.
-- Progress and failure detail during creation and restore.
+- Real disk usage: deduplicated and compressed size against logical size.
+- Failure detail during creation, and progress during a restore. Progress
+  during creation itself is delivered.
+
+Three follow-ups from the Borg work belong here too: a reconciliation command
+that sweeps up repositories orphaned by deleted servers along with the
+per-backup client caches and empty repository skeletons that snapshot mode
+leaves behind on the node after a delete, and time-based retention as a
+panel scheduled command rather than anything driven by Borg's own `prune`.
 
 ### Minecraft world manager
 
@@ -77,7 +90,7 @@ Fits the existing egg-features mechanism (`config/egg_features/`, alongside the
 current `eula` feature) so it only appears on servers whose egg declares it.
 **Needs Wings work** for the filesystem operations.
 
-Open question: how much of this is world-format-aware — reading `level.dat` for
+Open question: how much of this is world-format-aware - reading `level.dat` for
 seed, game mode and version enables a far better interface, but couples the panel
 to Minecraft world formats and their version drift.
 
@@ -101,7 +114,7 @@ Deploy server content from a git repository or another deployment source, with
 first-class plugin deployment.
 
 - Pull a repository into a server's files, on demand or on a schedule.
-- Deploy hooks around the pull — stop, sync, run a command, start.
+- Deploy hooks around the pull: stop, sync, run a command, start.
 - Plugin deployment: install and update plugins from their upstream sources,
   with pinned versions so a deployment is reproducible.
 - Credentials for private repositories, kept out of server files.

@@ -49,6 +49,10 @@
                                 <td>Total CPU Threads</td>
                                 <td data-attr="info-cpus"><i class="fa fa-refresh fa-fw fa-spin"></i></td>
                             </tr>
+                            <tr>
+                                <td>Daemon Features</td>
+                                <td data-attr="info-features"><i class="fa fa-refresh fa-fw fa-spin"></i></td>
+                            </tr>
                         </table>
                     </div>
                 </div>
@@ -160,6 +164,8 @@
             $('[data-attr="info-version"]').html(escapeHtml(data.version));
             $('[data-attr="info-system"]').html(escapeHtml(data.system.type) + ' (' + escapeHtml(data.system.arch) + ') <code>' + escapeHtml(data.system.release) + '</code>');
             $('[data-attr="info-cpus"]').html(data.system.cpus);
+            var features = Array.isArray(data.features) ? data.features : [];
+            $('[data-attr="info-features"]').html(features.length ? features.map(escapeHtml).join(', ') : '<em>None advertised</em>');
         }).fail(function (jqXHR) {
 
         }).always(function() {

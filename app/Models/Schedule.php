@@ -22,6 +22,7 @@ use Pterodactyl\Contracts\Extensions\HashidsInterface;
  * @property bool $is_active
  * @property bool $is_processing
  * @property bool $only_when_online
+ * @property string|null $healthchecks_uuid
  * @property \Carbon\Carbon|null $last_run_at
  * @property \Carbon\Carbon|null $next_run_at
  * @property \Carbon\Carbon $created_at
@@ -65,6 +66,7 @@ class Schedule extends Model
         'is_active',
         'is_processing',
         'only_when_online',
+        'healthchecks_uuid',
         'last_run_at',
         'next_run_at',
     ];
@@ -102,6 +104,7 @@ class Schedule extends Model
         'is_active' => 'boolean',
         'is_processing' => 'boolean',
         'only_when_online' => 'boolean',
+        'healthchecks_uuid' => 'nullable|uuid',
         'last_run_at' => 'nullable|date',
         'next_run_at' => 'nullable|date',
     ];

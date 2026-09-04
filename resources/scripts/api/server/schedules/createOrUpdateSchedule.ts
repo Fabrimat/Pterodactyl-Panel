@@ -1,12 +1,13 @@
 import { rawDataToServerSchedule, Schedule } from '@/api/server/schedules/getServerSchedules';
 import http from '@/api/http';
 
-type Data = Pick<Schedule, 'cron' | 'name' | 'onlyWhenOnline' | 'isActive'> & { id?: number };
+type Data = Pick<Schedule, 'cron' | 'name' | 'onlyWhenOnline' | 'isActive' | 'healthchecksUuid'> & { id?: number };
 
 export default async (uuid: string, schedule: Data): Promise<Schedule> => {
     const { data } = await http.post(`/api/client/servers/${uuid}/schedules${schedule.id ? `/${schedule.id}` : ''}`, {
         is_active: schedule.isActive,
         only_when_online: schedule.onlyWhenOnline,
+        healthchecks_uuid: schedule.healthchecksUuid || null,
         name: schedule.name,
         minute: schedule.cron.minute,
         hour: schedule.cron.hour,

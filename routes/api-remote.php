@@ -20,6 +20,7 @@ Route::group(['prefix' => '/servers/{uuid}'], function () {
 
 Route::group(['prefix' => '/backups'], function () {
     Route::get('/{backup}', Remote\Backups\BackupRemoteUploadController::class);
+    Route::get('/{backup}/borg', Remote\Backups\BorgConfigurationController::class);
     Route::post('/{backup}', [Remote\Backups\BackupStatusController::class, 'index']);
     Route::post('/{backup}/restore', [Remote\Backups\BackupStatusController::class, 'restore']);
 });

@@ -11,12 +11,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 /**
  * @property int $id
  * @property int $server_id
+ * @property int|null $schedule_id
  * @property string $uuid
  * @property bool $is_successful
  * @property bool $is_locked
  * @property string $name
  * @property string[] $ignored_files
  * @property string $disk
+ * @property string|null $borg_repository Repository path relative to the configured base, null for the legacy per-server layout
  * @property string|null $checksum
  * @property int $bytes
  * @property string|null $upload_id
@@ -25,6 +27,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
  * @property \Carbon\CarbonImmutable $updated_at
  * @property \Carbon\CarbonImmutable|null $deleted_at
  * @property Server $server
+ * @property Schedule|null $schedule
  * @property \Pterodactyl\Models\AuditLog[] $audits
  */
 #[Attributes\Identifiable('bkup')]
@@ -39,6 +42,7 @@ class Backup extends Model implements Identifiable
 
     public const ADAPTER_WINGS = 'wings';
     public const ADAPTER_AWS_S3 = 's3';
+    public const ADAPTER_BORG = 'borg';
 
     protected $table = 'backups';
 
@@ -65,6 +69,7 @@ class Backup extends Model implements Identifiable
 
     public static array $validationRules = [
         'server_id' => 'bail|required|numeric|exists:servers,id',
+        'schedule_id' => 'nullable|integer',
         'uuid' => 'required|uuid',
         'is_successful' => 'boolean',
         'is_locked' => 'boolean',
@@ -82,5 +87,13 @@ class Backup extends Model implements Identifiable
     public function server(): BelongsTo
     {
         return $this->belongsTo(Server::class);
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Relations\BelongsTo<\Pterodactyl\Models\Schedule, $this>
+     */
+    public function schedule(): BelongsTo
+    {
+        return $this->belongsTo(Schedule::class);
     }
 }
