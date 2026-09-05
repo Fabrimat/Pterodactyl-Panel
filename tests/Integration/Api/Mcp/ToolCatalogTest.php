@@ -48,6 +48,13 @@ class ToolCatalogTest extends McpIntegrationTestCase
         $this->assertCount(0, array_filter($names, fn ($name) => str_starts_with($name, 'panel_admin_')));
     }
 
+    /**
+     * The expected set is rebuilt from AuthenticateOAuthScopes::isWriteRoute() rather
+     * than from the HTTP verb alone: a client GET route can still hand out write
+     * capability, and files/upload is exactly that case. Deriving the expectation from
+     * the verb heuristic under test would make this pass identically whether or not
+     * that heuristic is correct.
+     */
     public function testReadOnlyOAuthTokenSeesOnlyClientReadTools(): void
     {
         [$user] = $this->generateTestAccount();
@@ -56,17 +63,26 @@ class ToolCatalogTest extends McpIntegrationTestCase
         $names = $this->toolNames();
         $this->assertNotEmpty($names);
 
-        $applicationTools = array_keys(array_filter(
-            $this->registry->all(),
-            fn (array $row) => ($row['api'] ?? null) === 'application'
-        ));
-        $writeTools = array_keys(array_filter(
-            $this->registry->all(),
-            fn (array $row) => strtoupper($row['method'] ?? 'GET') !== 'GET'
-        ));
+        $expected = array_keys(array_filter($this->registry->all(), function (array $row) {
+            if (($row['api'] ?? null) === 'application') {
+                return false;
+            }
 
-        $this->assertEmpty(array_intersect($names, $applicationTools));
-        $this->assertEmpty(array_intersect($names, $writeTools));
+            $uri = ltrim(EndpointRegistry::basePath($row), '/') . ($row['path'] ?? '');
+            if (Str::startsWith($uri, AuthenticateOAuthScopes::PROTECTED_ROUTES)) {
+                return false;
+            }
+
+            return strtoupper((string) ($row['method'] ?? 'GET')) === 'GET'
+                && !AuthenticateOAuthScopes::isWriteRoute($uri);
+        }));
+
+        $this->assertEqualsCanonicalizing($expected, $names);
+        $this->assertNotContains('panel_client_servers_files_upload', $names);
+
+        $response = $this->callTool('panel_client_servers_files_upload')->assertOk();
+        $response->assertJsonPath('error.code', -32602);
+        $this->assertArrayNotHasKey('result', $response->json());
     }
 
     /**

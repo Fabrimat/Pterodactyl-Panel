@@ -4,6 +4,7 @@ namespace Pterodactyl\Tests\Integration\Api\OAuth;
 
 use Pterodactyl\Models\User;
 use Illuminate\Http\Response;
+use Pterodactyl\Models\Permission;
 use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 
 class ClientApiScopeTest extends OAuthIntegrationTestCase
@@ -79,6 +80,43 @@ class ClientApiScopeTest extends OAuthIntegrationTestCase
         $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_WRITE]);
 
         $this->getJson("/api/client/servers/$server->uuid")->assertStatus(Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * files/upload and websocket are GET routes that hand out write capability rather
+     * than merely describing state: the first returns a signed Wings URL that accepts
+     * arbitrary file writes, the second a node JWT carrying the user's full permission
+     * set for the server. A client:read token must not reach either despite the verb.
+     * Both permissions are granted directly so a 403 here can only mean the scope check
+     * fired, never a missing server permission.
+     */
+    public function testReadScopeCannotReachWriteCapableGetRoutes(): void
+    {
+        [$user, $server] = $this->generateTestAccount([
+            Permission::ACTION_FILE_CREATE,
+            Permission::ACTION_WEBSOCKET_CONNECT,
+        ]);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ]);
+
+        $this->getJson("/api/client/servers/$server->uuid/files/upload")->assertStatus(Response::HTTP_FORBIDDEN);
+        $this->getJson("/api/client/servers/$server->uuid/websocket")->assertStatus(Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * A client:write token can reach both write-capable GET routes.
+     */
+    public function testWriteScopeCanReachWriteCapableGetRoutes(): void
+    {
+        [$user, $server] = $this->generateTestAccount([
+            Permission::ACTION_FILE_CREATE,
+            Permission::ACTION_WEBSOCKET_CONNECT,
+        ]);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_WRITE]);
+
+        $this->getJson("/api/client/servers/$server->uuid/files/upload")->assertOk();
+        $this->getJson("/api/client/servers/$server->uuid/websocket")->assertOk();
     }
 
     /**

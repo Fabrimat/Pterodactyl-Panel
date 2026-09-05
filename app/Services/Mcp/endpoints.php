@@ -318,6 +318,11 @@ return [
         'description' => 'Fetch the wings configuration (config.yml contents) generated for this node.',
         'api' => 'application',
         'method' => 'GET',
+        // GetNodeConfigurationRequest declares $permission = AdminAcl::WRITE because the
+        // response discloses the node's daemon token, not because the request changes
+        // anything. This flag mirrors that declaration so the tool is advertised and gated
+        // as a write despite the GET verb.
+        'scope' => 'write',
         'path' => '/nodes/{nodeId}/configuration',
         'path_params' => [
             'nodeId' => [

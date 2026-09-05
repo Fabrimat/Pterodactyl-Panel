@@ -82,7 +82,8 @@ class ToolCatalog
             return true;
         }
 
-        $read = strtoupper((string) ($row['method'] ?? 'GET')) === 'GET';
+        $read = self::isRead($row);
+
         $scope = match (true) {
             $application && $read => OAuthScopeAcl::ADMIN_READ,
             $application => OAuthScopeAcl::ADMIN_WRITE,
@@ -98,7 +99,7 @@ class ToolCatalog
         // tokens by the client API middleware. Deriving the list from that constant rather
         // than keeping a second copy is what stops the two from drifting apart and leaving
         // a tool advertised that the Panel would never actually run.
-        return !Str::startsWith($this->uri($row), AuthenticateOAuthScopes::PROTECTED_ROUTES);
+        return !Str::startsWith(self::uri($row), AuthenticateOAuthScopes::PROTECTED_ROUTES);
     }
 
     /**
@@ -106,9 +107,32 @@ class ToolCatalog
      *
      * @param array<string, mixed> $row
      */
-    protected function uri(array $row): string
+    protected static function uri(array $row): string
     {
         return ltrim(EndpointRegistry::basePath($row), '/') . ($row['path'] ?? '');
+    }
+
+    /**
+     * Whether a row counts as a read for scope and annotation purposes. A GET row is not
+     * automatically read-only: the client routes that hand out write capability despite
+     * the verb are matched against the same list the OAuth middleware enforces, and the
+     * application row that does the same (fetching a node's daemon token) is flagged
+     * directly on the table with 'scope' => 'write', mirroring the permission its
+     * FormRequest declares rather than duplicating a second route list here.
+     *
+     * @param array<string, mixed> $row
+     */
+    protected static function isRead(array $row): bool
+    {
+        if (strtoupper((string) ($row['method'] ?? 'GET')) !== 'GET') {
+            return false;
+        }
+
+        if (($row['api'] ?? null) === 'application') {
+            return ($row['scope'] ?? null) !== 'write';
+        }
+
+        return !AuthenticateOAuthScopes::isWriteRoute(self::uri($row));
     }
 
     /**
@@ -141,9 +165,9 @@ class ToolCatalog
             'inputSchema' => $schema,
             // The spec defaults destructiveHint to true when the key is absent, so emitting
             // destructiveHint: false actively tells a client that no confirmation is needed.
-            // Every non-GET row therefore carries true: the "destructive" flag in the table
-            // documents why a particular row is dangerous, it does not decide this.
-            'annotations' => strtoupper((string) ($row['method'] ?? 'GET')) === 'GET'
+            // Every row that is not read-only therefore carries true: the "destructive" flag
+            // in the table documents why a particular row is dangerous, it does not decide this.
+            'annotations' => self::isRead($row)
                 ? ['readOnlyHint' => true]
                 : ['readOnlyHint' => false, 'destructiveHint' => true],
         ];
