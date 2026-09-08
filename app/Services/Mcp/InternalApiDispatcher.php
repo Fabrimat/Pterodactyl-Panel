@@ -124,11 +124,7 @@ class InternalApiDispatcher
             // happened is "wrong argument shape", the same misleading failure F5 refuses
             // for a text body, and it has no way to tell the two apart from a 404 alone.
             if (!is_scalar($value)) {
-                throw new \InvalidArgumentException(sprintf(
-                    'The "%s" argument must be a string, %s given. It selects a single resource by id, not a structured value.',
-                    $key,
-                    get_debug_type($value)
-                ));
+                throw new \InvalidArgumentException(sprintf('The "%s" argument must be a string, %s given. It selects a single resource by id, not a structured value.', $key, get_debug_type($value)));
             }
 
             $value = (string) $value;
@@ -150,10 +146,7 @@ class InternalApiDispatcher
             // route under the same one. rawurlencode() below still runs for whatever this
             // check does not catch, such as a literal "%" a caller's id happens to hold.
             if (str_contains($value, '/')) {
-                throw new \InvalidArgumentException(sprintf(
-                    'The "%s" argument may not contain "/". It selects a single resource by id, and a slash would let the value decide which route this call reaches instead of the tool that was called.',
-                    $key
-                ));
+                throw new \InvalidArgumentException(sprintf('The "%s" argument may not contain "/". It selects a single resource by id, and a slash would let the value decide which route this call reaches instead of the tool that was called.', $key));
             }
 
             $path = str_replace('{' . $key . '}', rawurlencode($value), $path);
@@ -195,11 +188,7 @@ class InternalApiDispatcher
                 // success regardless, the exact silent data loss this guards against.
                 // Refusing before a request exists at all is the only way to guarantee the
                 // Panel never sees the call.
-                throw new \InvalidArgumentException(sprintf(
-                    'The "%s" argument must be a string, %s given. Send the file contents as a plain string, or an explicit empty string to write an empty file.',
-                    $key,
-                    get_debug_type($value)
-                ));
+                throw new \InvalidArgumentException(sprintf('The "%s" argument must be a string, %s given. Send the file contents as a plain string, or an explicit empty string to write an empty file.', $key, get_debug_type($value)));
             }
 
             // This has to be the raw body of the request rather than an input field: the
