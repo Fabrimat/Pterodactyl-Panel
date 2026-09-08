@@ -163,8 +163,16 @@ class McpController extends Controller
         }
 
         // A tool that the Panel refuses comes back from the dispatcher as a result carrying
-        // isError, not as a JSON-RPC error. The call itself worked; the answer was no.
-        return $this->result($id, $this->dispatcher->call($row, $arguments, $request));
+        // isError, not as a JSON-RPC error. The call itself worked; the answer was no. An
+        // argument of the wrong shape for the row never reaches that point at all: the
+        // dispatcher throws before a request exists, so the Panel never saw the call, and
+        // that belongs with every other bad-argument case above rather than being reported
+        // as if the Panel had run and refused it.
+        try {
+            return $this->result($id, $this->dispatcher->call($row, $arguments, $request));
+        } catch (\InvalidArgumentException $e) {
+            return $this->error($id, -32602, $e->getMessage());
+        }
     }
 
     /**

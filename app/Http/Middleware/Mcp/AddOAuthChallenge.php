@@ -30,9 +30,17 @@ class AddOAuthChallenge
         $response = $request->bearerToken() ? $next($request) : $this->unauthenticated();
 
         if ($response instanceof Response && $response->getStatusCode() === Response::HTTP_UNAUTHORIZED) {
+            // The host comes from the configured application URL rather than from this
+            // request, which this Panel's proxy configuration trusts and which an
+            // attacker can therefore steer. route()'s third argument returns only the
+            // path, so the value still follows the route if it is ever renamed, while
+            // nothing about the host can be influenced by the request that triggered
+            // this challenge.
+            $resourceMetadata = rtrim(config('app.url'), '/') . route('oauth.protected-resource', [], false);
+
             $response->headers->set(
                 'WWW-Authenticate',
-                sprintf('Bearer resource_metadata="%s"', route('oauth.protected-resource'))
+                sprintf('Bearer resource_metadata="%s"', $resourceMetadata)
             );
         }
 
@@ -40,10 +48,18 @@ class AddOAuthChallenge
     }
 
     /**
-     * A session cookie authenticates the rest of the Panel, but there is nothing in one to
-     * forward to the API on behalf of the caller, so a tool call made with a session would
-     * fail on every endpoint it tried. Refusing it here answers with the challenge instead,
-     * which is what a client needs to go and get a token it can actually use.
+     * This is not a security boundary: the guard stack behind $next() accepts a session
+     * exactly as readily as a bearer token, so a caller who already holds a session cookie
+     * for the Panel loses nothing by attaching an arbitrary bearer string and continuing
+     * past this check, and gains nothing either, since they could already reach the same
+     * API directly from the browser they are signed into.
+     *
+     * The reason to refuse here rather than let the request continue is what a client
+     * following the discovery flow of RFC 9728 is actually looking for: a 401 carrying
+     * "resource_metadata" on a request that carries no bearer token at all. Letting such a
+     * request fall through to the guard stack risks it being authenticated some other way
+     * before it ever gets a chance to fail, which would answer it with a normal response
+     * instead of the challenge the client came here to find.
      */
     protected function unauthenticated(): JsonResponse
     {

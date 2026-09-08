@@ -6,6 +6,7 @@ use Laravel\Passport\Passport;
 use Illuminate\Support\Facades\Route;
 use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 use Pterodactyl\Http\Middleware\RestrictAdminOAuthScopes;
+use Pterodactyl\Http\Middleware\RequireS256CodeChallengeMethod;
 use Pterodactyl\Http\Middleware\RequireTwoFactorAuthentication;
 
 class AuthorizationServerTest extends OAuthIntegrationTestCase
@@ -23,11 +24,35 @@ class AuthorizationServerTest extends OAuthIntegrationTestCase
         $response->assertJsonPath('response_types_supported', ['code']);
         $response->assertJsonPath('code_challenge_methods_supported', ['S256']);
 
-        $this->assertSame(route('passport.authorizations.authorize'), $response->json('authorization_endpoint'));
-        $this->assertSame(route('passport.token'), $response->json('token_endpoint'));
+        $appUrl = rtrim(config('app.url'), '/');
+        $this->assertSame($appUrl . route('passport.authorizations.authorize', [], false), $response->json('authorization_endpoint'));
+        $this->assertSame($appUrl . route('passport.token', [], false), $response->json('token_endpoint'));
         $this->assertSame(array_keys(OAuthScopeAcl::scopes()), $response->json('scopes_supported'));
         $this->assertContains('authorization_code', $response->json('grant_types_supported'));
         $this->assertContains('refresh_token', $response->json('grant_types_supported'));
+    }
+
+    /**
+     * TRUSTED_PROXIES is set to "*" in production, which makes an X-Forwarded-Host
+     * header authoritative for what the request appears to have arrived on, and a bare
+     * Host header is trusted by Symfony regardless of that setting. Requesting the
+     * document through an absolute URL naming a different host reproduces the effect of
+     * either directly: Symfony's Request::create() takes the host straight from the URL
+     * it is given, and Laravel's test client passes an already-absolute URL straight
+     * through instead of prefixing it, so this does not depend on how trusted proxies
+     * happen to be configured under test. The endpoints must still point at the
+     * configured application URL, never at the host the request arrived on.
+     */
+    public function testMetadataDocumentIgnoresTheRequestHost(): void
+    {
+        $response = $this->getJson('http://evil.example/.well-known/oauth-authorization-server');
+
+        $response->assertOk();
+
+        $appUrl = rtrim(config('app.url'), '/');
+        $this->assertSame($appUrl, $response->json('issuer'));
+        $this->assertSame($appUrl . route('passport.authorizations.authorize', [], false), $response->json('authorization_endpoint'));
+        $this->assertSame($appUrl . route('passport.token', [], false), $response->json('token_endpoint'));
     }
 
     /**
@@ -64,6 +89,26 @@ class AuthorizationServerTest extends OAuthIntegrationTestCase
             $this->assertContains('auth', $middleware, "The $name route is not authenticated.");
             $this->assertContains(RequireTwoFactorAuthentication::class, $middleware, "The $name route does not honor the two-factor requirement.");
             $this->assertContains(RestrictAdminOAuthScopes::class, $middleware, "The $name route does not restrict administrative scopes.");
+            $this->assertContains(RequireS256CodeChallengeMethod::class, $middleware, "The $name route does not restrict the PKCE code challenge method.");
         }
+    }
+
+    /**
+     * The Panel does not use the device authorization flow, and Passport::$deviceCodeGrantEnabled
+     * is turned off in OAuthServiceProvider::register() specifically so these routes never come
+     * into existence: RestrictAdminOAuthScopes reads the requested scopes off the request, and a
+     * device approval carries none there at all, so attaching that middleware to the device routes
+     * would not close the gap a device grant opens onto the admin scope check. The routes not
+     * existing is the whole defence, which is exactly what this asserts. It fails if the flag is
+     * ever moved back into boot(), where Passport has already read it and registered these routes
+     * before this provider gets a turn, or if the flag is dropped entirely.
+     */
+    public function testDeviceAuthorizationRoutesDoNotExist(): void
+    {
+        $this->assertNull(Route::getRoutes()->getByName('passport.device'), 'The device user code route exists.');
+        $this->assertNull(Route::getRoutes()->getByName('passport.device.code'), 'The device code route exists.');
+        $this->assertNull(Route::getRoutes()->getByName('passport.device.authorizations.authorize'), 'The device authorization route exists.');
+        $this->assertNull(Route::getRoutes()->getByName('passport.device.authorizations.approve'), 'The device approval route exists.');
+        $this->assertNull(Route::getRoutes()->getByName('passport.device.authorizations.deny'), 'The device denial route exists.');
     }
 }
