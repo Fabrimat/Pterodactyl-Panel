@@ -87,19 +87,34 @@ class ClientApiScopeTest extends OAuthIntegrationTestCase
      * than merely describing state: the first returns a signed Wings URL that accepts
      * arbitrary file writes, the second a node JWT carrying the user's full permission
      * set for the server. A client:read token must not reach either despite the verb.
-     * Both permissions are granted directly so a 403 here can only mean the scope check
-     * fired, never a missing server permission.
+     * The permission each route needs is granted directly so a 403 here can only mean
+     * the scope check fired, never a missing server permission.
+     *
+     * The two routes are asserted in separate tests, and they have to stay that way.
+     * Handler::render() rolls every open transaction back to level 0 so that session
+     * data persists, which under DatabaseTransactions discards the account the test
+     * just created. A second request in the same test would be made against a server
+     * that no longer exists, and the route binding would answer 404 before the scope
+     * check it is meant to be exercising ever ran.
      */
-    public function testReadScopeCannotReachWriteCapableGetRoutes(): void
+    public function testReadScopeCannotReachTheFileUploadRoute(): void
     {
-        [$user, $server] = $this->generateTestAccount([
-            Permission::ACTION_FILE_CREATE,
-            Permission::ACTION_WEBSOCKET_CONNECT,
-        ]);
+        [$user, $server] = $this->generateTestAccount([Permission::ACTION_FILE_CREATE]);
 
         $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ]);
 
         $this->getJson("/api/client/servers/$server->uuid/files/upload")->assertStatus(Response::HTTP_FORBIDDEN);
+    }
+
+    /**
+     * The websocket half of the same rule, in its own test for the reason given above.
+     */
+    public function testReadScopeCannotReachTheWebsocketRoute(): void
+    {
+        [$user, $server] = $this->generateTestAccount([Permission::ACTION_WEBSOCKET_CONNECT]);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ]);
+
         $this->getJson("/api/client/servers/$server->uuid/websocket")->assertStatus(Response::HTTP_FORBIDDEN);
     }
 
