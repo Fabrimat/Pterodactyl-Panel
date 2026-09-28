@@ -19,7 +19,29 @@ class AuthenticationTest extends McpIntegrationTestCase
         $response->assertStatus(Response::HTTP_UNAUTHORIZED);
         $response->assertHeader(
             'WWW-Authenticate',
-            sprintf('Bearer resource_metadata="%s"', route('oauth.protected-resource'))
+            sprintf('Bearer resource_metadata="%s"', rtrim(config('app.url'), '/') . route('oauth.protected-resource', [], false))
+        );
+    }
+
+    /**
+     * TRUSTED_PROXIES is set to "*" in production, which makes an X-Forwarded-Host
+     * header authoritative for what the request appears to have arrived on, and a bare
+     * Host header is trusted by Symfony regardless of that setting. Posting to an
+     * absolute URL naming a different host reproduces the effect of either directly:
+     * Symfony's Request::create() takes the host straight from the URL it is given,
+     * and Laravel's test client passes an already-absolute URL straight through
+     * instead of prefixing it, so this does not depend on how trusted proxies happen
+     * to be configured under test. The header must still point at the configured
+     * application URL, never at the host the request arrived on.
+     */
+    public function testChallengeIgnoresTheRequestHost(): void
+    {
+        $response = $this->postJson('http://evil.example/mcp', ['jsonrpc' => '2.0', 'id' => 1, 'method' => 'ping']);
+
+        $response->assertStatus(Response::HTTP_UNAUTHORIZED);
+        $response->assertHeader(
+            'WWW-Authenticate',
+            sprintf('Bearer resource_metadata="%s"', rtrim(config('app.url'), '/') . route('oauth.protected-resource', [], false))
         );
     }
 

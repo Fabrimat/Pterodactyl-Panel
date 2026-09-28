@@ -38,4 +38,23 @@ class AnnotationsTest extends McpIntegrationTestCase
             );
         }
     }
+
+    /**
+     * panel_client_servers_files_upload is a GET that hands back a signed Wings URL
+     * accepting arbitrary file writes. The shape test above permits both annotation
+     * shapes to appear in the table, so it would not by itself catch this row falling
+     * back to the GET-implies-read-only shape.
+     */
+    public function testFileUploadToolCarriesTheDestructiveShape(): void
+    {
+        [$user] = $this->generateTestAccount();
+        $user->update(['root_admin' => true]);
+        $this->actingAsApiKeyUser($user);
+
+        $tools = $this->listTools();
+        $tool = collect($tools)->firstWhere('name', 'panel_client_servers_files_upload');
+
+        $this->assertNotNull($tool, 'panel_client_servers_files_upload was not found in the tool listing.');
+        $this->assertSame(['readOnlyHint' => false, 'destructiveHint' => true], $tool['annotations']);
+    }
 }

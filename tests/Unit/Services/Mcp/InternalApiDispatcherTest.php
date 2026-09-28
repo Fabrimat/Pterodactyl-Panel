@@ -41,18 +41,128 @@ class InternalApiDispatcherTest extends TestCase
     }
 
     /**
-     * A path parameter is a value the caller chose, so it may not be able to decide which
-     * route the internal request matches.
+     * An array or an object is not a value a text body can represent at all. Coercing it
+     * to '' the way a missing argument is coerced would still let build() hand dispatch()
+     * a request with an empty body, and for the file write endpoint that truncates
+     * whatever file the caller asked to update while still reporting success. That is the
+     * one failure here that destroys data silently, and it has to be refused before a
+     * request is ever assembled rather than answered with one.
+     */
+    public function testTextRowRefusesANonScalarValueInsteadOfWritingAnEmptyFile(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must be a string');
+
+        $this->dispatcher->build($this->row(), [
+            'serverId' => 'abcd1234',
+            'content' => ['not' => 'a string'],
+        ], $this->outer());
+    }
+
+    /**
+     * call() does not catch this itself. Which JSON-RPC error code belongs on a bad
+     * argument is a decision the controller makes, not this class: an isError result
+     * describes a call the Panel actually received and refused, and this call never
+     * reached the Panel at all, so it has to propagate rather than be reported as one.
+     */
+    public function testCallPropagatesTheSameExceptionBuildThrows(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must be a string');
+
+        $this->dispatcher->call($this->row(), [
+            'serverId' => 'abcd1234',
+            'content' => ['not' => 'a string'],
+        ], $this->outer());
+    }
+
+    /**
+     * An absent argument and an explicit null are indistinguishable in intent, both
+     * meaning "the caller did not supply content", and writing an empty file is a
+     * legitimate thing a caller can want on purpose. Neither of them is refused the way a
+     * genuine array or object is.
+     */
+    public function testTextRowTreatsAnExplicitNullTheSameAsAnEmptyString(): void
+    {
+        $request = $this->dispatcher->build($this->row(), [
+            'serverId' => 'abcd1234',
+            'content' => null,
+        ], $this->outer());
+
+        $this->assertSame('', $request->getContent());
+    }
+
+    /**
+     * A path parameter is a value the caller chose. A "/" is refused outright by
+     * build() rather than being encoded and left for the router to decide what it
+     * matches, see testPathParametersContainingASlashAreRefused() below. Anything
+     * else still goes through rawurlencode() so it cannot be mistaken for a second
+     * query string or an extra path segment.
      */
     public function testPathParametersAreEncoded(): void
     {
         $request = $this->dispatcher->build($this->row(), [
-            'serverId' => '../../application/users?x=1',
+            'serverId' => 'users?x=1',
             'content' => '',
         ], $this->outer());
 
-        $this->assertSame('/api/client/servers/..%2F..%2Fapplication%2Fusers%3Fx%3D1/files/write', $request->getPathInfo());
-        $this->assertStringStartsWith('/api/client/servers/', $request->getPathInfo());
+        $this->assertSame('/api/client/servers/users%3Fx%3D1/files/write', $request->getPathInfo());
+    }
+
+    /**
+     * Every path parameter in the endpoint table names a single resource by id, so a
+     * "/" is refused rather than encoded: Illuminate\Routing\Matching\UriValidator::
+     * matches() decodes the whole path before it ever matches a route, so an encoded
+     * slash would still be seen by the router as a real path separator.
+     */
+    public function testPathParametersContainingASlashAreRefused(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('may not contain "/"');
+
+        $this->dispatcher->build($this->row(), [
+            'serverId' => '../../application/users?x=1',
+            'content' => '',
+        ], $this->outer());
+    }
+
+    /**
+     * An array or an object for a path parameter used to be coerced to '', which still
+     * produced a request the Panel would answer 404 to, but for the wrong reason: the
+     * caller would read "not found" when what actually happened is "wrong argument
+     * shape", with no way to tell the two apart from a 404 alone. Refused here the same
+     * way a non-scalar text body is, so it reads the same way too.
+     */
+    public function testPathParametersRefuseANonScalarValue(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('must be a string');
+
+        $this->dispatcher->build($this->row(), [
+            'serverId' => ['not' => 'a string'],
+            'content' => '',
+        ], $this->outer());
+    }
+
+    /**
+     * An absent argument and an explicit null are not the same failure as a non-scalar
+     * value: there is no legitimate resource id either way, but there is also no sharper
+     * answer available than the 404 an empty path segment already produces, so neither
+     * is refused. This is unchanged from before the check above was added.
+     */
+    public function testPathParametersTreatAnAbsentOrNullValueAsAnEmptyString(): void
+    {
+        $absent = $this->dispatcher->build($this->row(), [
+            'content' => '',
+        ], $this->outer());
+
+        $null = $this->dispatcher->build($this->row(), [
+            'serverId' => null,
+            'content' => '',
+        ], $this->outer());
+
+        $this->assertSame('/api/client/servers//files/write', $absent->getPathInfo());
+        $this->assertSame('/api/client/servers//files/write', $null->getPathInfo());
     }
 
     /**
