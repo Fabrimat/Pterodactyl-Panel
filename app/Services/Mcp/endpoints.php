@@ -1328,7 +1328,7 @@ return [
         'query' => [
             'include' => [
                 'type' => 'string',
-                'description' => 'Comma-separated related resources to embed in the response. Available: password, host.',
+                'description' => 'Comma-separated related resources to embed in the response. Available: password, host. Including password requires the admin:write scope and is refused without it.',
             ],
         ],
         'required' => [
@@ -1356,7 +1356,7 @@ return [
         'query' => [
             'include' => [
                 'type' => 'string',
-                'description' => 'Comma-separated related resources to embed in the response. Available: password, host.',
+                'description' => 'Comma-separated related resources to embed in the response. Available: password, host. Including password requires the admin:write scope and is refused without it.',
             ],
         ],
         'required' => [

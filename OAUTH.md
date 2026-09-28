@@ -40,6 +40,16 @@ The same rule is applied on the application API, where each request declares the
 permission it requires. Reading a node's configuration is a `GET` that discloses
 the node's daemon token, and it asks for write access for that reason.
 
+Asking for the `password` include when reading a server's databases returns the
+decrypted password of the database user, which works directly against the
+database host and is not taken back by revoking the token. An OAuth token needs
+`admin:write` for that include, whether it is asked for directly or nested under
+a server's `databases`. Without it the request is refused, and the same request
+without the include is answered as usual. Creating a database returns its
+password through the same include and already requires `admin:write`, so a token
+allowed to create databases can still use them. API keys are unaffected and keep
+being authorized by their own resource permissions.
+
 The two `admin` scopes are refused at the consent screen for an account that is
 not an administrator, so a token carrying them can never be created for a
 regular user.
