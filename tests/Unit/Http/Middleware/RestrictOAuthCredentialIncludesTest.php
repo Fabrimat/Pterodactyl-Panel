@@ -4,7 +4,7 @@ namespace Pterodactyl\Tests\Unit\Http\Middleware;
 
 use Illuminate\Http\Request;
 use Pterodactyl\Tests\TestCase;
-use Pterodactyl\Http\Middleware\Api\Application\RestrictOAuthCredentialIncludes;
+use Pterodactyl\Http\Middleware\Api\RestrictOAuthCredentialIncludes;
 
 class RestrictOAuthCredentialIncludesTest extends TestCase
 {
@@ -34,6 +34,9 @@ class RestrictOAuthCredentialIncludesTest extends TestCase
             'padded with whitespace' => ['GET', ['include' => 'host, password '], true],
             'with modifiers' => ['GET', ['include' => 'password:limit(1|0)'], true],
             'nested under another include' => ['GET', ['include' => 'databases.password'], true],
+            'nested behind a modifier' => ['GET', ['include' => 'databases:limit(1).password'], true],
+            'nested behind an empty modifier' => ['GET', ['include' => 'databases:.password'], true],
+            'a modifier naming it' => ['GET', ['include' => 'host:password'], false],
             'as an array' => ['GET', ['include' => ['host', 'password']], true],
             'in a request body' => ['POST', ['include' => 'password'], true],
             'a different case' => ['GET', ['include' => 'PASSWORD'], false],

@@ -2113,7 +2113,7 @@ return [
         'query' => [
             'include' => [
                 'type' => 'string',
-                'description' => 'Comma-separated related resources to embed in the response. Available: password.',
+                'description' => 'Comma-separated related resources to embed in the response. Available: password. Including password requires the client:write scope and is refused without it.',
             ],
         ],
         'required' => [

@@ -9,6 +9,7 @@ use Illuminate\Http\Middleware\TrustProxies;
 use Pterodactyl\Http\Middleware\TrimStrings;
 use Illuminate\Session\Middleware\StartSession;
 use Pterodactyl\Http\Middleware\EncryptCookies;
+use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 use Pterodactyl\Http\Middleware\Api\IsValidJson;
 use Pterodactyl\Http\Middleware\VerifyCsrfToken;
 use Pterodactyl\Http\Middleware\VerifyReCaptcha;
@@ -33,9 +34,9 @@ use Pterodactyl\Http\Middleware\RequireTwoFactorAuthentication;
 use Pterodactyl\Http\Middleware\Api\Client\AuthenticateOAuthScopes;
 use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
 use Pterodactyl\Http\Middleware\Api\Client\SubstituteClientBindings;
+use Pterodactyl\Http\Middleware\Api\RestrictOAuthCredentialIncludes;
 use Illuminate\Foundation\Http\Middleware\PreventRequestsDuringMaintenance;
 use Pterodactyl\Http\Middleware\Api\Application\AuthenticateApplicationUser;
-use Pterodactyl\Http\Middleware\Api\Application\RestrictOAuthCredentialIncludes;
 
 class Kernel extends HttpKernel
 {
@@ -80,12 +81,13 @@ class Kernel extends HttpKernel
         'application-api' => [
             SubstituteBindings::class,
             AuthenticateApplicationUser::class,
-            RestrictOAuthCredentialIncludes::class,
+            RestrictOAuthCredentialIncludes::class . ':' . OAuthScopeAcl::ADMIN_WRITE,
         ],
         'client-api' => [
             SubstituteClientBindings::class,
             RequireClientApiKey::class,
             AuthenticateOAuthScopes::class,
+            RestrictOAuthCredentialIncludes::class . ':' . OAuthScopeAcl::CLIENT_WRITE,
         ],
         'daemon' => [
             SubstituteBindings::class,

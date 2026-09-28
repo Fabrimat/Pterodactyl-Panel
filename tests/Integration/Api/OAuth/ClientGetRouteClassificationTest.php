@@ -23,6 +23,10 @@ class ClientGetRouteClassificationTest extends OAuthIntegrationTestCase
      * one-time classification, checked against exact normalised URIs rather than
      * prefixes so that a future route nested under one of these does not silently
      * pass unreviewed.
+     *
+     * The databases route is a read only without its password include. That include
+     * is gated separately, on the include rather than the route, by
+     * RestrictOAuthCredentialIncludes.
      */
     private const KNOWN_READ = [
         'api/client',

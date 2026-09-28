@@ -14,7 +14,7 @@ use Pterodactyl\Services\Acl\Api\OAuthScopeAcl;
 
 /**
  * The password include on a server database returns the decrypted password of that
- * database user. Each refusal is asserted in its own test: Handler::render() rolls every
+ * database user, on both the application and the client API. Each refusal is asserted in its own test: Handler::render() rolls every
  * open transaction back to level 0, which under DatabaseTransactions discards the
  * fixtures, so a second request in the same test would not find them.
  */
@@ -109,20 +109,65 @@ class DatabasePasswordIncludeTest extends OAuthIntegrationTestCase
             ->assertJsonPath('attributes.relationships.password.attributes.password', 'test123');
     }
 
-    private function assertCredentialRefused(TestResponse $response): void
+    /**
+     * The client API offers the same include, and a read scope cannot use it there either,
+     * even for the owner of the server, who always holds the permission to view it.
+     */
+    public function testClientReadScopeCannotIncludeThePassword(): void
+    {
+        [$user, $server] = $this->generateTestAccount();
+        $this->createDatabase($server);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ]);
+
+        $this->assertCredentialRefused($this->getJson("/api/client/servers/$server->uuid/databases?include=password"), OAuthScopeAcl::CLIENT_WRITE);
+    }
+
+    /**
+     * Without the include, a client read scope lists the databases as before.
+     */
+    public function testClientReadScopeCanStillListDatabasesWithoutThePassword(): void
+    {
+        [$user, $server] = $this->generateTestAccount();
+        $this->createDatabase($server);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ]);
+
+        $this->getJson("/api/client/servers/$server->uuid/databases")
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonMissingPath('data.0.attributes.relationships.password');
+    }
+
+    /**
+     * A client token that also holds the write scope can include the password.
+     */
+    public function testClientWriteScopeCanIncludeThePassword(): void
+    {
+        [$user, $server] = $this->generateTestAccount();
+        $this->createDatabase($server);
+
+        $this->actingAsOAuthUser($user, [OAuthScopeAcl::CLIENT_READ, OAuthScopeAcl::CLIENT_WRITE]);
+
+        $this->getJson("/api/client/servers/$server->uuid/databases?include=password")
+            ->assertOk()
+            ->assertJsonPath('data.0.attributes.relationships.password.attributes.password', 'test123');
+    }
+
+    private function assertCredentialRefused(TestResponse $response, string $scope = OAuthScopeAcl::ADMIN_WRITE): void
     {
         $response->assertStatus(Response::HTTP_FORBIDDEN)
             ->assertJsonPath('errors.0.code', 'AccessDeniedHttpException');
 
-        $this->assertStringContainsString(OAuthScopeAcl::ADMIN_WRITE, $response->json('errors.0.detail'));
+        $this->assertStringContainsString($scope, $response->json('errors.0.detail'));
     }
 
     /**
      * @return array{0: Database, 1: Server}
      */
-    private function createDatabase(): array
+    private function createDatabase(?Server $server = null): array
     {
-        $server = $this->createServerModel();
+        $server ??= $this->createServerModel();
 
         /** @var Database $database */
         $database = Database::factory()->create([
